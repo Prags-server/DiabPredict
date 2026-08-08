@@ -7,16 +7,29 @@ export type UserSession = {
 };
 
 export const SESSION_COOKIE_NAME = "diabpredict_session";
-const SESSION_SECRET =
-  process.env.SESSION_SECRET || "dev-only-session-secret-change-in-production";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+const SESSION_MAX_AGE_MILLISECONDS = SESSION_MAX_AGE_SECONDS * 1000;
+const DEV_FALLBACK_SECRET = "dev-only-session-secret-change-in-production";
 
 type SessionPayload = UserSession & {
   iat: number;
+  exp: number;
 };
 
+function getSessionSecret(): string {
+  const configuredSecret = process.env.SESSION_SECRET;
+
+  if (process.env.NODE_ENV === "production" && !configuredSecret) {
+    throw new Error("SESSION_SECRET must be set in production.");
+  }
+
+  return configuredSecret || DEV_FALLBACK_SECRET;
+}
+
 function signPayload(payload: string): string {
-  return createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+  return createHmac("sha256", getSessionSecret())
+    .update(payload)
+    .digest("base64url");
 }
 
 export function createUserId(name: string): string {
@@ -31,6 +44,7 @@ export function createSessionToken(session: UserSession): string {
     userId: session.userId,
     name: session.name,
     iat: Date.now(),
+    exp: Date.now() + SESSION_MAX_AGE_MILLISECONDS,
   };
 
   const payloadBase64 = Buffer.from(JSON.stringify(payload), "utf-8").toString(
@@ -62,7 +76,15 @@ export function parseSessionToken(token: string): UserSession | null {
       Buffer.from(payloadBase64, "base64url").toString("utf-8")
     ) as SessionPayload;
 
-    if (!decodedPayload.userId || !decodedPayload.name) {
+    if (
+      !decodedPayload.userId ||
+      !decodedPayload.name ||
+      typeof decodedPayload.exp !== "number"
+    ) {
+      return null;
+    }
+
+    if (Date.now() > decodedPayload.exp) {
       return null;
     }
 

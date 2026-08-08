@@ -14,6 +14,16 @@ The system is designed to be a screening test tool for experiment and should be 
    ```
 3. Open `http://localhost:3000`
 
+## Deploy to Vercel (Production)
+
+1. Import this repository in Vercel.
+2. Add environment variables from [.env.example](C:/Users/prags/OneDrive/Desktop/DiabPredict/DiabPredict/.env.example):
+   - `SESSION_SECRET` (required in production)
+   - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (recommended for persistent history)
+3. Deploy.
+
+Without KV, history falls back to local filesystem storage, which is not durable on serverless production.
+
 ## Training CSV Format
 
 Upload a CSV file with these headers (in this order):
@@ -22,10 +32,10 @@ Upload a CSV file with these headers (in this order):
 
 ## Prediction History Persistence
 
-- Predictions are saved by the backend API in `.data/history/<userId>.json`.
+- Predictions are saved by the backend API in Vercel KV when configured.
+- Local fallback uses `.data/history/<userId>.json` for development.
 - History is isolated per signed-in profile.
 - History can be loaded, removed, and cleared from the UI.
-- This is file-based persistence for development/single-instance hosting.
 
 ## Profile Authentication
 

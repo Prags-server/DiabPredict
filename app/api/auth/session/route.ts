@@ -13,7 +13,11 @@ const signInSchema = z.object({
     .string()
     .trim()
     .min(2, "Name must be at least 2 characters")
-    .max(40, "Name must be at most 40 characters"),
+    .max(40, "Name must be at most 40 characters")
+    .regex(
+      /^[a-zA-Z0-9 _-]+$/,
+      "Name can only include letters, numbers, spaces, _ and -"
+    ),
 });
 
 export async function GET(request: NextRequest) {

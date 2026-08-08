@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { kv } from "@vercel/kv";
 
 type Prediction = {
   predictedHbA1c: number;
@@ -36,9 +37,16 @@ export type PredictionHistoryItem = {
 const DATA_DIRECTORY = path.join(process.cwd(), ".data");
 const HISTORY_DIRECTORY = path.join(DATA_DIRECTORY, "history");
 const MAX_HISTORY_ITEMS = 100;
+const isKvConfigured = Boolean(
+  process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
+);
 
 function getHistoryFilePath(userId: string): string {
   return path.join(HISTORY_DIRECTORY, `${userId}.json`);
+}
+
+function getHistoryKey(userId: string): string {
+  return `history:${userId}`;
 }
 
 async function ensureHistoryFile(userId: string) {
@@ -52,6 +60,11 @@ async function ensureHistoryFile(userId: string) {
 }
 
 export async function readHistory(userId: string): Promise<PredictionHistoryItem[]> {
+  if (isKvConfigured) {
+    const data = await kv.get<PredictionHistoryItem[]>(getHistoryKey(userId));
+    return Array.isArray(data) ? data : [];
+  }
+
   const historyFilePath = getHistoryFilePath(userId);
   await ensureHistoryFile(userId);
   const rawContent = await fs.readFile(historyFilePath, "utf-8");
@@ -63,6 +76,13 @@ export async function saveHistory(
   userId: string,
   item: PredictionHistoryItem
 ): Promise<PredictionHistoryItem[]> {
+  if (isKvConfigured) {
+    const existingHistory = await readHistory(userId);
+    const nextHistory = [item, ...existingHistory].slice(0, MAX_HISTORY_ITEMS);
+    await kv.set(getHistoryKey(userId), nextHistory);
+    return nextHistory;
+  }
+
   const historyFilePath = getHistoryFilePath(userId);
   const existingHistory = await readHistory(userId);
   const nextHistory = [item, ...existingHistory].slice(0, MAX_HISTORY_ITEMS);
@@ -74,6 +94,13 @@ export async function removeHistoryItem(
   userId: string,
   id: string
 ): Promise<PredictionHistoryItem[]> {
+  if (isKvConfigured) {
+    const existingHistory = await readHistory(userId);
+    const nextHistory = existingHistory.filter((item) => item.id !== id);
+    await kv.set(getHistoryKey(userId), nextHistory);
+    return nextHistory;
+  }
+
   const historyFilePath = getHistoryFilePath(userId);
   const existingHistory = await readHistory(userId);
   const nextHistory = existingHistory.filter((item) => item.id !== id);
@@ -82,6 +109,11 @@ export async function removeHistoryItem(
 }
 
 export async function clearHistory(userId: string): Promise<PredictionHistoryItem[]> {
+  if (isKvConfigured) {
+    await kv.del(getHistoryKey(userId));
+    return [];
+  }
+
   const historyFilePath = getHistoryFilePath(userId);
   await ensureHistoryFile(userId);
   await fs.writeFile(historyFilePath, "[]", "utf-8");
