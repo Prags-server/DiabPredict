@@ -20,6 +20,12 @@ Upload a CSV file with these headers (in this order):
 
 `age,gender,height,weight,bmi,systolic_bp,diastolic_bp,rbs,fbs,waist,hip,hba1c`
 
+## Prediction History Persistence
+
+- Predictions are now saved by the backend API at `.data/prediction-history.json`.
+- History can be loaded, removed, and cleared from the UI.
+- This is file-based persistence for development/single-instance hosting.
+
 Diabetes Prediction System - Core Logic Explained
 
 1. Data Collection

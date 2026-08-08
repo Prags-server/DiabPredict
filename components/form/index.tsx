@@ -77,8 +77,6 @@ type HistoryItem = {
   inputs: Omit<z.infer<typeof formSchema>, "resetTraining">;
 };
 
-const HISTORY_STORAGE_KEY = "diabpredict-history-v1";
-
 export function PatientForm({
   onDataChange,
 }: {
@@ -90,6 +88,7 @@ export function PatientForm({
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [submissionError, setSubmissionError] = useState<string>("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -110,22 +109,28 @@ export function PatientForm({
   });
 
   useEffect(() => {
-    const rawHistory = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (!rawHistory) {
-      return;
-    }
+    const loadHistory = async () => {
+      setHistoryLoading(true);
+      try {
+        const response = await fetch("/api/history", { method: "GET" });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to load prediction history");
+        }
+        setHistory(result.history || []);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to load prediction history.";
+        setSubmissionError(message);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
 
-    try {
-      const parsed = JSON.parse(rawHistory) as HistoryItem[];
-      setHistory(parsed);
-    } catch (error) {
-      console.error("Failed to load prediction history:", error);
-    }
+    loadHistory();
   }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
-  }, [history]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -179,25 +184,31 @@ export function PatientForm({
 
       if (result.prediction !== undefined) {
         setPrediction(result.prediction);
-        const newHistoryItem: HistoryItem = {
-          id: crypto.randomUUID(),
-          createdAt: new Date().toISOString(),
-          prediction: result.prediction as Prediction,
-          inputs: {
-            age: values.age,
-            gender: values.gender,
-            height: values.height,
-            weight: values.weight,
-            bmi: values.bmi,
-            systolic_bp: values.systolic_bp,
-            diastolic_bp: values.diastolic_bp,
-            rbs: values.rbs,
-            fbs: values.fbs,
-            waist: values.waist,
-            hip: values.hip,
-          },
-        };
-        setHistory((prev) => [newHistoryItem, ...prev].slice(0, 20));
+        const historyResponse = await fetch("/api/history", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prediction: result.prediction,
+            inputs: {
+              age: values.age,
+              gender: values.gender,
+              height: values.height,
+              weight: values.weight,
+              bmi: values.bmi,
+              systolic_bp: values.systolic_bp,
+              diastolic_bp: values.diastolic_bp,
+              rbs: values.rbs,
+              fbs: values.fbs,
+              waist: values.waist,
+              hip: values.hip,
+            },
+          }),
+        });
+        const historyResult = await historyResponse.json();
+        if (!historyResponse.ok) {
+          throw new Error(historyResult.error || "Failed to save prediction history");
+        }
+        setHistory(historyResult.history || []);
       }
 
       // Toggle reset checkbox back to false after submission
@@ -229,11 +240,47 @@ export function PatientForm({
   };
 
   const removeHistoryItem = (id: string) => {
-    setHistory((prev) => prev.filter((item) => item.id !== id));
+    const deleteHistoryItem = async () => {
+      try {
+        const response = await fetch(`/api/history?id=${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to remove history item");
+        }
+        setHistory(result.history || []);
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : "Failed to remove history item.";
+        setSubmissionError(message);
+      }
+    };
+
+    deleteHistoryItem();
   };
 
   const clearHistory = () => {
-    setHistory([]);
+    const deleteAllHistory = async () => {
+      try {
+        const response = await fetch("/api/history", {
+          method: "DELETE",
+        });
+        const result = await response.json();
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to clear history");
+        }
+        setHistory(result.history || []);
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Failed to clear history.";
+        setSubmissionError(message);
+      }
+    };
+
+    deleteAllHistory();
   };
 
   return (
@@ -511,7 +558,7 @@ export function PatientForm({
         <CardContent>
           {history.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No saved predictions yet.
+              {historyLoading ? "Loading history..." : "No saved predictions yet."}
             </p>
           ) : (
             <div className="space-y-3">
