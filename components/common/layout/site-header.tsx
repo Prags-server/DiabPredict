@@ -3,8 +3,15 @@
 import { ThemeToggle } from "@/components/common/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { FileText, Menu, RotateCw } from "lucide-react";
+import { Playfair_Display } from "next/font/google";
 import Link from "next/link";
 import { useState } from "react";
+
+const logoFont = Playfair_Display({
+  subsets: ["latin"],
+  weight: ["700"],
+  style: ["italic"],
+});
 
 export function SiteHeader() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -20,10 +27,16 @@ export function SiteHeader() {
         <div className="flex items-center flex-none">
           <Link href="/" className="flex items-center space-x-2">
             <FileText className="h-6 w-6 text-blue-700" />
-            <span className="font-bold hidden sm:inline">
-              Diabetes Prediction
+            <span
+              className={`${logoFont.className} hidden sm:inline text-2xl tracking-tight bg-gradient-to-r from-blue-600 via-violet-600 to-blue-500 bg-clip-text text-transparent`}
+            >
+              DiabPREDICT
             </span>
-            <span className="font-bold sm:hidden">Diabetes Prediction</span>
+            <span
+              className={`${logoFont.className} sm:hidden text-xl tracking-tight bg-gradient-to-r from-blue-600 via-violet-600 to-blue-500 bg-clip-text text-transparent`}
+            >
+              DiabPREDICT
+            </span>
           </Link>
         </div>
 
