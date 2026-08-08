@@ -1,17 +1,21 @@
 import * as tf from "@tensorflow/tfjs";
+import { NormalizationStats } from "./prepare";
 
 export async function predictPatient(
   newPatient: any,
   trainedModel: any,
-  stats?: any
+  stats?: NormalizationStats
 ) {
   // Convert patient data to tensor
   const inputTensor = tf.tensor2d([newPatient]);
 
   // Normalize input if stats are provided
   let normalizedInput = inputTensor;
-  if (stats) {
+  if (stats?.mode === "zscore") {
     normalizedInput = inputTensor.sub(stats.mean).div(stats.std.add(1e-8));
+  } else if (stats?.mode === "minmax") {
+    const range = stats.max.sub(stats.min);
+    normalizedInput = inputTensor.sub(stats.min).div(range.add(1e-8));
   }
 
   // Predict

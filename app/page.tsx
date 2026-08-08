@@ -8,8 +8,8 @@ import { useState } from "react";
 export default function Home() {
   const [csvData, setCsvData] = useState<string[][]>([]);
 
-  const handleDataChange = (data: any) => {
-    const transformedData = data.map((row: any) => [
+  const handleDataChange = (data: Record<string, string>[]) => {
+    const transformedData = data.map((row) => [
       row.age || "",
       row.gender || "",
       row.height || "",
@@ -28,13 +28,13 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="flex">
-        <div className="w-[60%]">
+      <div className="flex flex-col xl:flex-row">
+        <div className="w-full xl:w-[60%]">
           <ErrorBoundary>
-            <GridView initialRows={1} initialCols={8} data={csvData} />
+            <GridView initialRows={1} initialCols={12} data={csvData} />
           </ErrorBoundary>
         </div>
-        <div className="w-[40%]">
+        <div className="w-full xl:w-[40%]">
           <ErrorBoundary>
             <PatientForm onDataChange={handleDataChange} />
           </ErrorBoundary>

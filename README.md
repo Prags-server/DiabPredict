@@ -2,6 +2,24 @@
 
 The system is designed to be a screening test tool for experiment and should be used in conjunction with professional medical advice
 
+## Run Locally
+
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Start the app:
+   ```bash
+   npm run dev
+   ```
+3. Open `http://localhost:3000`
+
+## Training CSV Format
+
+Upload a CSV file with these headers (in this order):
+
+`age,gender,height,weight,bmi,systolic_bp,diastolic_bp,rbs,fbs,waist,hip,hba1c`
+
 Diabetes Prediction System - Core Logic Explained
 
 1. Data Collection

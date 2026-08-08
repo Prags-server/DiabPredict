@@ -1,8 +1,12 @@
 import { createModel } from "@/lib/server/core/create-model";
+import { NormalizationStats } from "@/lib/server/core/prepare";
 import { trainModel } from "@/lib/server/core/train-model";
+import * as tf from "@tensorflow/tfjs";
 
 class ModelSingleton {
-  private static instance: any;
+  private static model: tf.Sequential | null = null;
+  private static stats: NormalizationStats | null = null;
+  private static isTrained = false;
 
   private constructor() {}
 
@@ -10,18 +14,28 @@ class ModelSingleton {
     trainingData,
     resetTraining,
   }: {
-    trainingData: any;
+    trainingData: {
+      X: tf.Tensor2D;
+      Y: tf.Tensor1D;
+      stats: NormalizationStats;
+    };
     resetTraining: boolean;
   }) {
-    if (!ModelSingleton.instance) {
-      ModelSingleton.instance = createModel();
+    if (!ModelSingleton.model) {
+      ModelSingleton.model = createModel();
     }
 
-    if (resetTraining) {
-      await trainModel({ trainingData, model: ModelSingleton.instance });
+    const shouldTrain = !ModelSingleton.isTrained || resetTraining;
+    if (shouldTrain) {
+      await trainModel({ trainingData, model: ModelSingleton.model });
+      ModelSingleton.stats = trainingData.stats;
+      ModelSingleton.isTrained = true;
     }
 
-    return ModelSingleton.instance;
+    return {
+      model: ModelSingleton.model,
+      stats: ModelSingleton.stats,
+    };
   }
 }
 

@@ -25,13 +25,13 @@ export async function POST(request: NextRequest) {
     const csvData = await parseCSV(file);
     const trainingData = await prepareData(csvData);
 
-    const model = await getModel({ trainingData, resetTraining });
+    const modelState = await getModel({ trainingData, resetTraining });
 
     const inputData = patientData.split(",").map(Number);
     const prediction = await predictPatient(
       inputData,
-      model,
-      trainingData.stats
+      modelState.model,
+      modelState.stats || trainingData.stats
     );
 
     return NextResponse.json({
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Prediction error:", error);
     return NextResponse.json(
-      { error: "Failed to process prediction", errorData: error },
+      { error: "Failed to process prediction" },
       { status: 500 }
     );
   }

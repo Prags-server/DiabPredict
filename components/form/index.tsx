@@ -2,10 +2,11 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FileUp, Upload } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -22,38 +23,73 @@ import { ErrorBoundary } from "../common/error-boundary";
 import HbA1cResultCard from "./details";
 
 const formSchema = z.object({
-  age: z.string().min(1, { message: "Age is required" }),
-  gender: z.string().min(1, { message: "Gender is required" }),
-  height: z.string().min(1, { message: "Height is required" }),
-  weight: z.string().min(1, { message: "Weight is required" }),
-  bmi: z.string().min(1, { message: "BMI is required" }),
-  systolic_bp: z.string().min(1, { message: "Systolic BP is required" }),
-  diastolic_bp: z.string().min(1, { message: "Diastolic BP is required" }),
-  rbs: z.string().min(1, { message: "Random blood sugar is required" }),
-  fbs: z.string().min(1, { message: "Fasting blood sugar is required" }),
-  waist: z.string().min(1, { message: "Waist measurement is required" }),
-  hip: z.string().min(1, { message: "Hip measurement is required" }),
+  age: z.string().refine((val) => Number(val) > 0, {
+    message: "Age must be greater than 0",
+  }),
+  gender: z.string().refine((val) => val === "0" || val === "1", {
+    message: "Gender must be 0 (Female) or 1 (Male)",
+  }),
+  height: z.string().refine((val) => Number(val) > 0, {
+    message: "Height must be greater than 0",
+  }),
+  weight: z.string().refine((val) => Number(val) > 0, {
+    message: "Weight must be greater than 0",
+  }),
+  bmi: z.string().refine((val) => Number(val) > 0, {
+    message: "BMI must be greater than 0",
+  }),
+  systolic_bp: z.string().refine((val) => Number(val) > 0, {
+    message: "Systolic BP must be greater than 0",
+  }),
+  diastolic_bp: z.string().refine((val) => Number(val) > 0, {
+    message: "Diastolic BP must be greater than 0",
+  }),
+  rbs: z.string().refine((val) => Number(val) > 0, {
+    message: "Random blood sugar must be greater than 0",
+  }),
+  fbs: z.string().refine((val) => Number(val) > 0, {
+    message: "Fasting blood sugar must be greater than 0",
+  }),
+  waist: z.string().refine((val) => Number(val) > 0, {
+    message: "Waist must be greater than 0",
+  }),
+  hip: z.string().refine((val) => Number(val) > 0, {
+    message: "Hip must be greater than 0",
+  }),
   resetTraining: z.boolean().default(false),
 });
 
-type PredictionOutput = {
-  label: string;
-  percentage: string;
+type Prediction = {
+  predictedHbA1c: number;
+  diabeticStatus: string;
+  risk: string;
+  interpretation: {
+    status: string;
+    description: string;
+    distanceToNextThreshold: string;
+  };
 };
 
-type Prediction = {
-  output: PredictionOutput[];
+type HistoryItem = {
+  id: string;
+  createdAt: string;
+  prediction: Prediction;
+  inputs: Omit<z.infer<typeof formSchema>, "resetTraining">;
 };
+
+const HISTORY_STORAGE_KEY = "diabpredict-history-v1";
 
 export function PatientForm({
   onDataChange,
 }: {
-  onDataChange: (data: string[][]) => void;
+  onDataChange: (data: Record<string, string>[]) => void;
 }) {
   const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
+  const [submissionError, setSubmissionError] = useState<string>("");
+  const [history, setHistory] = useState<HistoryItem[]>([]);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -73,21 +109,41 @@ export function PatientForm({
     },
   });
 
+  useEffect(() => {
+    const rawHistory = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!rawHistory) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(rawHistory) as HistoryItem[];
+      setHistory(parsed);
+    } catch (error) {
+      console.error("Failed to load prediction history:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(history));
+  }, [history]);
+
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
     setFile(selectedFile);
     setFileName(selectedFile.name);
+    setSubmissionError("");
   };
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     if (!file) {
-      alert("Please upload a training data CSV file");
+      setSubmissionError("Please upload a training data CSV file before predicting.");
       return;
     }
 
     setIsLoading(true);
+    setSubmissionError("");
     try {
       const formData = new FormData();
       formData.append("file", file);
@@ -116,22 +172,69 @@ export function PatientForm({
       });
 
       const result = await response.json();
-      console.log(result);
-      onDataChange(result.csvData);
+      if (!response.ok) {
+        throw new Error(result.error || "Prediction request failed");
+      }
+      onDataChange(result.csvData || []);
 
       if (result.prediction !== undefined) {
-        console.log("Prediction result:", result.prediction);
         setPrediction(result.prediction);
+        const newHistoryItem: HistoryItem = {
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          prediction: result.prediction as Prediction,
+          inputs: {
+            age: values.age,
+            gender: values.gender,
+            height: values.height,
+            weight: values.weight,
+            bmi: values.bmi,
+            systolic_bp: values.systolic_bp,
+            diastolic_bp: values.diastolic_bp,
+            rbs: values.rbs,
+            fbs: values.fbs,
+            waist: values.waist,
+            hip: values.hip,
+          },
+        };
+        setHistory((prev) => [newHistoryItem, ...prev].slice(0, 20));
       }
 
       // Toggle reset checkbox back to false after submission
       form.setValue("resetTraining", false);
     } catch (error) {
-      console.error("Error submitting form:", error);
+      const message =
+        error instanceof Error
+          ? error.message
+          : "An unexpected error occurred while predicting.";
+      setSubmissionError(message);
     } finally {
       setIsLoading(false);
     }
   }
+
+  const applyHistoryItem = (item: HistoryItem) => {
+    setPrediction(item.prediction);
+    form.setValue("age", item.inputs.age);
+    form.setValue("gender", item.inputs.gender);
+    form.setValue("height", item.inputs.height);
+    form.setValue("weight", item.inputs.weight);
+    form.setValue("bmi", item.inputs.bmi);
+    form.setValue("systolic_bp", item.inputs.systolic_bp);
+    form.setValue("diastolic_bp", item.inputs.diastolic_bp);
+    form.setValue("rbs", item.inputs.rbs);
+    form.setValue("fbs", item.inputs.fbs);
+    form.setValue("waist", item.inputs.waist);
+    form.setValue("hip", item.inputs.hip);
+  };
+
+  const removeHistoryItem = (id: string) => {
+    setHistory((prev) => prev.filter((item) => item.id !== id));
+  };
+
+  const clearHistory = () => {
+    setHistory([]);
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -171,9 +274,14 @@ export function PatientForm({
           <CardTitle>Patient Information</CardTitle>
         </CardHeader>
         <CardContent>
+          {submissionError ? (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>{submissionError}</AlertDescription>
+            </Alert>
+          ) : null}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                 <FormField
                   control={form.control}
                   name="age"
@@ -181,7 +289,7 @@ export function PatientForm({
                     <FormItem>
                       <FormLabel>Age</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="Age" {...field} />
+                        <Input type="number" min="1" placeholder="Age" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -200,6 +308,7 @@ export function PatientForm({
                           type="number"
                           min="0"
                           max="1"
+                          step="1"
                           placeholder="0 or 1"
                           {...field}
                         />
@@ -385,6 +494,64 @@ export function PatientForm({
           </CardContent>
         </Card>
       )}
+
+      <Card className="border-none">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle>Prediction History</CardTitle>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={clearHistory}
+            disabled={history.length === 0}
+          >
+            Clear
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {history.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No saved predictions yet.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {history.map((item) => (
+                <div
+                  key={item.id}
+                  className="rounded-md border p-3 flex items-center justify-between gap-2"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      HbA1c: {item.prediction.predictedHbA1c} ({item.prediction.diabeticStatus})
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(item.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => applyHistoryItem(item)}
+                    >
+                      Load
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeHistoryItem(item.id)}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

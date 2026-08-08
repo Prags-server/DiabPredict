@@ -3,7 +3,15 @@ export const parseCSV = async (file: File) => {
   const uint8Array = new Uint8Array(buffer);
 
   const csvString = new TextDecoder().decode(uint8Array);
-  const lines = csvString.split("\n");
+  const lines = csvString
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  if (lines.length < 2) {
+    throw new Error("CSV file must include a header row and at least one data row");
+  }
+
   const headers = lines[0]
     .split(",")
     .map((header) => header.trim().replace(/\r$/, ""));

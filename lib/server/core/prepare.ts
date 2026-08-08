@@ -1,5 +1,19 @@
 import * as tf from "@tensorflow/tfjs";
 
+type ZScoreStats = {
+  mode: "zscore";
+  mean: tf.Tensor1D;
+  std: tf.Tensor1D;
+};
+
+type MinMaxStats = {
+  mode: "minmax";
+  min: tf.Tensor1D;
+  max: tf.Tensor1D;
+};
+
+export type NormalizationStats = ZScoreStats | MinMaxStats;
+
 export async function prepareData(rawData: any[]) {
   // First validate the data
   const validData = rawData.filter((row) => {
@@ -94,13 +108,13 @@ export async function prepareData(rawData: any[]) {
   );
 
   return {
-    X: xNorm,
+    X: xNorm as tf.Tensor2D,
     Y: yTensor,
-    // Save stats for future prediction normalization
     stats: {
+      mode: "zscore",
       mean: xMean,
       std: xStd,
-    },
+    } as ZScoreStats,
   };
 }
 
@@ -123,11 +137,12 @@ function handleNormalizationFailure(
   const xNorm = xTensor.sub(xMin).div(range.add(epsilon));
 
   return {
-    X: xNorm,
+    X: xNorm as tf.Tensor2D,
     Y: yTensor,
     stats: {
+      mode: "minmax",
       min: xMin,
       max: xMax,
-    },
+    } as MinMaxStats,
   };
 }

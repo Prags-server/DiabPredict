@@ -1,13 +1,11 @@
 import * as tf from "@tensorflow/tfjs";
+import { NormalizationStats } from "./prepare";
 
 interface TrainingParams {
   trainingData: {
     X: tf.Tensor2D;
     Y: tf.Tensor1D;
-    stats: {
-      mean: tf.Tensor1D;
-      std: tf.Tensor1D;
-    };
+    stats: NormalizationStats;
   };
   model: tf.Sequential;
   epochs?: number;

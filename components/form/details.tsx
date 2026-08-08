@@ -7,9 +7,19 @@ import {
   TrendingUp,
 } from "lucide-react";
 
-const HbA1cResultCard = ({ prediction }: any) => {
+type PredictionDetails = {
+  predictedHbA1c: number;
+  diabeticStatus: string;
+  risk: string;
+  interpretation: {
+    description: string;
+    distanceToNextThreshold: string;
+  };
+};
+
+const HbA1cResultCard = ({ prediction }: { prediction: PredictionDetails }) => {
   // Handle status-based styling
-  const getStatusColor = (status: any) => {
+  const getStatusColor = (status: string) => {
     switch (status) {
       case "Non-Diabetic":
         return "bg-green-100 text-green-800";
@@ -22,7 +32,7 @@ const HbA1cResultCard = ({ prediction }: any) => {
     }
   };
 
-  const getStatusIcon = (status: any) => {
+  const getStatusIcon = (status: string) => {
     switch (status) {
       case "Non-Diabetic":
         return <Heart className="text-green-500" />;
@@ -35,7 +45,7 @@ const HbA1cResultCard = ({ prediction }: any) => {
     }
   };
 
-  const getRiskBadge = (risk: any) => {
+  const getRiskBadge = (risk: string) => {
     switch (risk) {
       case "Low":
         return (
@@ -64,7 +74,7 @@ const HbA1cResultCard = ({ prediction }: any) => {
     }
   };
 
-  const getTrendIcon = (status: any) => {
+  const getTrendIcon = (status: string) => {
     switch (status) {
       case "Non-Diabetic":
         return <ArrowDown className="text-green-500 h-5 w-5" />;
