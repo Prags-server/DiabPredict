@@ -22,9 +22,16 @@ Upload a CSV file with these headers (in this order):
 
 ## Prediction History Persistence
 
-- Predictions are now saved by the backend API at `.data/prediction-history.json`.
+- Predictions are saved by the backend API in `.data/history/<userId>.json`.
+- History is isolated per signed-in profile.
 - History can be loaded, removed, and cleared from the UI.
 - This is file-based persistence for development/single-instance hosting.
+
+## Profile Authentication
+
+- The app uses lightweight profile sign-in (name-based) with an HTTP-only session cookie.
+- Set `SESSION_SECRET` in your environment for production deployments.
+- You must sign in before prediction history can be accessed.
 
 Diabetes Prediction System - Core Logic Explained
 

@@ -2,11 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FileUp, Upload } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -77,6 +78,11 @@ type HistoryItem = {
   inputs: Omit<z.infer<typeof formSchema>, "resetTraining">;
 };
 
+type UserSession = {
+  userId: string;
+  name: string;
+};
+
 export function PatientForm({
   onDataChange,
 }: {
@@ -89,6 +95,11 @@ export function PatientForm({
   const [submissionError, setSubmissionError] = useState<string>("");
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
+  const [session, setSession] = useState<UserSession | null>(null);
+  const [authName, setAuthName] = useState("");
+  const [authLoading, setAuthLoading] = useState(true);
+  const [signInLoading, setSignInLoading] = useState(false);
+  const isAuthenticated = !!session;
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -108,29 +119,54 @@ export function PatientForm({
     },
   });
 
-  useEffect(() => {
-    const loadHistory = async () => {
-      setHistoryLoading(true);
-      try {
-        const response = await fetch("/api/history", { method: "GET" });
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error || "Failed to load prediction history");
-        }
-        setHistory(result.history || []);
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to load prediction history.";
-        setSubmissionError(message);
-      } finally {
-        setHistoryLoading(false);
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const response = await fetch("/api/history", { method: "GET" });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to load prediction history");
       }
-    };
-
-    loadHistory();
+      setHistory(result.history || []);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to load prediction history.";
+      setSubmissionError(message);
+    } finally {
+      setHistoryLoading(false);
+    }
   }, []);
+
+  const loadSession = useCallback(async () => {
+    setAuthLoading(true);
+    try {
+      const response = await fetch("/api/auth/session", { method: "GET" });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to load session");
+      }
+      if (result.session) {
+        setSession(result.session);
+        setAuthName(result.session.name);
+        await loadHistory();
+      } else {
+        setSession(null);
+        setHistory([]);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load profile session.";
+      setSubmissionError(message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [loadHistory]);
+
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
@@ -141,7 +177,61 @@ export function PatientForm({
     setSubmissionError("");
   };
 
+  const signIn = async () => {
+    const trimmedName = authName.trim();
+    if (trimmedName.length < 2) {
+      setSubmissionError("Enter a profile name with at least 2 characters.");
+      return;
+    }
+
+    setSignInLoading(true);
+    setSubmissionError("");
+    try {
+      const response = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: trimmedName }),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sign in");
+      }
+
+      setSession(result.session);
+      await loadHistory();
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to sign in to profile.";
+      setSubmissionError(message);
+    } finally {
+      setSignInLoading(false);
+    }
+  };
+
+  const signOut = async () => {
+    setSubmissionError("");
+    try {
+      const response = await fetch("/api/auth/session", { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to sign out");
+      }
+      setSession(null);
+      setHistory([]);
+      setPrediction(null);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to sign out.";
+      setSubmissionError(message);
+    }
+  };
+
   async function onSubmit(values: z.infer<typeof formSchema>) {
+    if (!isAuthenticated) {
+      setSubmissionError("Please sign in to a profile before predicting.");
+      return;
+    }
+
     if (!file) {
       setSubmissionError("Please upload a training data CSV file before predicting.");
       return;
@@ -153,7 +243,6 @@ export function PatientForm({
       const formData = new FormData();
       formData.append("file", file);
 
-      // Convert form values to comma-separated string for prediction
       const patientData = [
         values.age,
         values.gender,
@@ -211,7 +300,6 @@ export function PatientForm({
         setHistory(historyResult.history || []);
       }
 
-      // Toggle reset checkbox back to false after submission
       form.setValue("resetTraining", false);
     } catch (error) {
       const message =
@@ -239,53 +327,77 @@ export function PatientForm({
     form.setValue("hip", item.inputs.hip);
   };
 
-  const removeHistoryItem = (id: string) => {
-    const deleteHistoryItem = async () => {
-      try {
-        const response = await fetch(`/api/history?id=${encodeURIComponent(id)}`, {
-          method: "DELETE",
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error || "Failed to remove history item");
-        }
-        setHistory(result.history || []);
-      } catch (error) {
-        const message =
-          error instanceof Error
-            ? error.message
-            : "Failed to remove history item.";
-        setSubmissionError(message);
+  const removeHistoryItem = async (id: string) => {
+    try {
+      const response = await fetch(`/api/history?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to remove history item");
       }
-    };
-
-    deleteHistoryItem();
+      setHistory(result.history || []);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to remove history item.";
+      setSubmissionError(message);
+    }
   };
 
-  const clearHistory = () => {
-    const deleteAllHistory = async () => {
-      try {
-        const response = await fetch("/api/history", {
-          method: "DELETE",
-        });
-        const result = await response.json();
-        if (!response.ok) {
-          throw new Error(result.error || "Failed to clear history");
-        }
-        setHistory(result.history || []);
-      } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "Failed to clear history.";
-        setSubmissionError(message);
+  const clearHistory = async () => {
+    try {
+      const response = await fetch("/api/history", { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to clear history");
       }
-    };
-
-    deleteAllHistory();
+      setHistory(result.history || []);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to clear history.";
+      setSubmissionError(message);
+    }
   };
 
   return (
-    <div className="flex flex-col gap-6">
-      <Card className="border-none">
+    <div className="flex flex-col gap-6 p-2 sm:p-4">
+      <Card className="border-none shadow-sm">
+        <CardHeader>
+          <CardTitle>Profile Access</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {authLoading ? (
+            <p className="text-sm text-muted-foreground">Loading profile...</p>
+          ) : isAuthenticated ? (
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Signed in</Badge>
+                <span className="text-sm font-medium">{session.name}</span>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={signOut}>
+                Sign out
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                value={authName}
+                onChange={(event) => setAuthName(event.target.value)}
+                placeholder="Enter your profile name"
+                maxLength={40}
+              />
+              <Button type="button" onClick={signIn} disabled={signInLoading}>
+                {signInLoading ? "Signing in..." : "Sign in"}
+              </Button>
+            </div>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Your profile keeps prediction history isolated by user.
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-sm">
         <CardHeader>
           <CardTitle>Upload Training Data</CardTitle>
         </CardHeader>
@@ -307,6 +419,7 @@ export function PatientForm({
                 variant="outline"
                 onClick={() => document.getElementById("file-upload")?.click()}
                 className="mt-2"
+                disabled={!isAuthenticated}
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Select CSV File
@@ -316,7 +429,7 @@ export function PatientForm({
         </CardContent>
       </Card>
 
-      <Card className="border-none">
+      <Card className="border-none shadow-sm">
         <CardHeader>
           <CardTitle>Patient Information</CardTitle>
         </CardHeader>
@@ -324,6 +437,13 @@ export function PatientForm({
           {submissionError ? (
             <Alert variant="destructive" className="mb-4">
               <AlertDescription>{submissionError}</AlertDescription>
+            </Alert>
+          ) : null}
+          {!isAuthenticated ? (
+            <Alert className="mb-4">
+              <AlertDescription>
+                Sign in above to enable prediction and personal history.
+              </AlertDescription>
             </Alert>
           ) : null}
           <Form {...form}>
@@ -397,12 +517,7 @@ export function PatientForm({
                     <FormItem>
                       <FormLabel>BMI</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="BMI"
-                          {...field}
-                        />
+                        <Input type="number" step="0.01" placeholder="BMI" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -415,11 +530,7 @@ export function PatientForm({
                     <FormItem>
                       <FormLabel>Systolic BP (mmHg)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Systolic BP"
-                          {...field}
-                        />
+                        <Input type="number" placeholder="Systolic BP" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -432,11 +543,7 @@ export function PatientForm({
                     <FormItem>
                       <FormLabel>Diastolic BP (mmHg)</FormLabel>
                       <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="Diastolic BP"
-                          {...field}
-                        />
+                        <Input type="number" placeholder="Diastolic BP" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -514,7 +621,7 @@ export function PatientForm({
                 )}
               />
 
-              <Button type="submit" disabled={isLoading}>
+              <Button type="submit" disabled={isLoading || !isAuthenticated}>
                 {isLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -530,7 +637,7 @@ export function PatientForm({
       </Card>
 
       {prediction && (
-        <Card className="border-none">
+        <Card className="border-none shadow-sm">
           <CardHeader>
             <CardTitle>Prediction Results</CardTitle>
           </CardHeader>
@@ -542,7 +649,7 @@ export function PatientForm({
         </Card>
       )}
 
-      <Card className="border-none">
+      <Card className="border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Prediction History</CardTitle>
           <Button
@@ -550,13 +657,17 @@ export function PatientForm({
             variant="outline"
             size="sm"
             onClick={clearHistory}
-            disabled={history.length === 0}
+            disabled={history.length === 0 || !isAuthenticated}
           >
             Clear
           </Button>
         </CardHeader>
         <CardContent>
-          {history.length === 0 ? (
+          {!isAuthenticated ? (
+            <p className="text-sm text-muted-foreground">
+              Sign in to access your personal prediction history.
+            </p>
+          ) : history.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               {historyLoading ? "Loading history..." : "No saved predictions yet."}
             </p>
@@ -569,7 +680,8 @@ export function PatientForm({
                 >
                   <div>
                     <p className="text-sm font-medium">
-                      HbA1c: {item.prediction.predictedHbA1c} ({item.prediction.diabeticStatus})
+                      HbA1c: {item.prediction.predictedHbA1c} (
+                      {item.prediction.diabeticStatus})
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(item.createdAt).toLocaleString()}

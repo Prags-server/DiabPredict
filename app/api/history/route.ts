@@ -5,6 +5,7 @@ import {
   removeHistoryItem,
   saveHistory,
 } from "@/lib/server/history-store";
+import { getSessionFromRequest } from "@/lib/server/auth-session";
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -39,9 +40,19 @@ const createHistoryItemSchema = z.object({
   inputs: inputsSchema,
 });
 
-export async function GET() {
+function getAuthorizedUserId(request: NextRequest): string | null {
+  const session = getSessionFromRequest(request);
+  return session?.userId || null;
+}
+
+export async function GET(request: NextRequest) {
+  const userId = getAuthorizedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    const history = await readHistory();
+    const history = await readHistory(userId);
     return NextResponse.json({ history });
   } catch (error) {
     console.error("Failed to read prediction history:", error);
@@ -53,6 +64,11 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const userId = getAuthorizedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const payload = await request.json();
     const parsedPayload = createHistoryItemSchema.safeParse(payload);
@@ -71,7 +87,7 @@ export async function POST(request: NextRequest) {
       inputs: parsedPayload.data.inputs,
     };
 
-    const history = await saveHistory(newHistoryItem);
+    const history = await saveHistory(userId, newHistoryItem);
     return NextResponse.json({ item: newHistoryItem, history }, { status: 201 });
   } catch (error) {
     console.error("Failed to save prediction history:", error);
@@ -83,9 +99,16 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const userId = getAuthorizedUserId(request);
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const itemId = request.nextUrl.searchParams.get("id");
-    const history = itemId ? await removeHistoryItem(itemId) : await clearHistory();
+    const history = itemId
+      ? await removeHistoryItem(userId, itemId)
+      : await clearHistory(userId);
     return NextResponse.json({ history });
   } catch (error) {
     console.error("Failed to delete prediction history:", error);

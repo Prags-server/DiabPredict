@@ -34,43 +34,56 @@ export type PredictionHistoryItem = {
 };
 
 const DATA_DIRECTORY = path.join(process.cwd(), ".data");
-const HISTORY_FILE_PATH = path.join(DATA_DIRECTORY, "prediction-history.json");
+const HISTORY_DIRECTORY = path.join(DATA_DIRECTORY, "history");
 const MAX_HISTORY_ITEMS = 100;
 
-async function ensureHistoryFile() {
-  await fs.mkdir(DATA_DIRECTORY, { recursive: true });
+function getHistoryFilePath(userId: string): string {
+  return path.join(HISTORY_DIRECTORY, `${userId}.json`);
+}
+
+async function ensureHistoryFile(userId: string) {
+  const historyFilePath = getHistoryFilePath(userId);
+  await fs.mkdir(HISTORY_DIRECTORY, { recursive: true });
   try {
-    await fs.access(HISTORY_FILE_PATH);
+    await fs.access(historyFilePath);
   } catch {
-    await fs.writeFile(HISTORY_FILE_PATH, "[]", "utf-8");
+    await fs.writeFile(historyFilePath, "[]", "utf-8");
   }
 }
 
-export async function readHistory(): Promise<PredictionHistoryItem[]> {
-  await ensureHistoryFile();
-  const rawContent = await fs.readFile(HISTORY_FILE_PATH, "utf-8");
+export async function readHistory(userId: string): Promise<PredictionHistoryItem[]> {
+  const historyFilePath = getHistoryFilePath(userId);
+  await ensureHistoryFile(userId);
+  const rawContent = await fs.readFile(historyFilePath, "utf-8");
   const parsedContent = JSON.parse(rawContent) as PredictionHistoryItem[];
   return Array.isArray(parsedContent) ? parsedContent : [];
 }
 
 export async function saveHistory(
+  userId: string,
   item: PredictionHistoryItem
 ): Promise<PredictionHistoryItem[]> {
-  const existingHistory = await readHistory();
+  const historyFilePath = getHistoryFilePath(userId);
+  const existingHistory = await readHistory(userId);
   const nextHistory = [item, ...existingHistory].slice(0, MAX_HISTORY_ITEMS);
-  await fs.writeFile(HISTORY_FILE_PATH, JSON.stringify(nextHistory, null, 2), "utf-8");
+  await fs.writeFile(historyFilePath, JSON.stringify(nextHistory, null, 2), "utf-8");
   return nextHistory;
 }
 
-export async function removeHistoryItem(id: string): Promise<PredictionHistoryItem[]> {
-  const existingHistory = await readHistory();
+export async function removeHistoryItem(
+  userId: string,
+  id: string
+): Promise<PredictionHistoryItem[]> {
+  const historyFilePath = getHistoryFilePath(userId);
+  const existingHistory = await readHistory(userId);
   const nextHistory = existingHistory.filter((item) => item.id !== id);
-  await fs.writeFile(HISTORY_FILE_PATH, JSON.stringify(nextHistory, null, 2), "utf-8");
+  await fs.writeFile(historyFilePath, JSON.stringify(nextHistory, null, 2), "utf-8");
   return nextHistory;
 }
 
-export async function clearHistory(): Promise<PredictionHistoryItem[]> {
-  await ensureHistoryFile();
-  await fs.writeFile(HISTORY_FILE_PATH, "[]", "utf-8");
+export async function clearHistory(userId: string): Promise<PredictionHistoryItem[]> {
+  const historyFilePath = getHistoryFilePath(userId);
+  await ensureHistoryFile(userId);
+  await fs.writeFile(historyFilePath, "[]", "utf-8");
   return [];
 }
