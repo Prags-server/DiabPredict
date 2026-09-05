@@ -12,7 +12,27 @@ export const config = {
 };
 
 const PATIENT_FEATURE_COUNT = 11;
-const patientInputSchema = z.array(z.number().finite()).length(PATIENT_FEATURE_COUNT);
+const patientInputSchema = z.tuple([
+  z.number().finite().min(1).max(120),
+  z.number().int().min(0).max(1),
+  z.number().finite().min(50).max(250),
+  z.number().finite().min(10).max(400),
+  z.number().finite().min(10).max(80),
+  z.number().finite().min(50).max(300),
+  z.number().finite().min(30).max(200),
+  z.number().finite().min(20).max(700),
+  z.number().finite().min(20).max(700),
+  z.number().finite().min(30).max(250),
+  z.number().finite().min(30).max(250),
+]).superRefine((values, context) => {
+  if (values[6] >= values[5]) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [6],
+      message: "Diastolic blood pressure must be lower than systolic blood pressure.",
+    });
+  }
+});
 
 export async function POST(request: NextRequest) {
   const session = getSessionFromRequest(request);
@@ -81,9 +101,12 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Prediction error:", error);
+    const message = error instanceof Error && error.message.includes("Persistent training storage")
+      ? error.message
+      : "Failed to process prediction";
     return NextResponse.json(
-      { error: "Failed to process prediction" },
-      { status: 500 }
+      { error: message },
+      { status: message.startsWith("Persistent") ? 503 : 500 }
     );
   }
 }

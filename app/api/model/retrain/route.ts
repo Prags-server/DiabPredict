@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
         : "The existing model was retained because the new candidate performed materially worse on validation data.",
     });
   } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Training failed" }, { status: 400 });
+    const message = error instanceof Error ? error.message : "Training failed";
+    return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 400 });
   }
 }

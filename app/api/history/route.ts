@@ -6,7 +6,12 @@ import {
   saveHistory,
   updateHistoryItem,
 } from "@/lib/server/history-store";
-import { createRecord, readTrainingWorkspace, saveTrainingWorkspace } from "@/lib/server/training-store";
+import {
+  createRecord,
+  readTrainingWorkspace,
+  recordFingerprint,
+  saveTrainingWorkspace,
+} from "@/lib/server/training-store";
 import { getSessionFromRequest } from "@/lib/server/auth-session";
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -58,9 +63,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ history });
   } catch (error) {
     console.error("Failed to read prediction history:", error);
+    const message = error instanceof Error && error.message.includes("Persistent history storage")
+      ? error.message
+      : "Failed to read prediction history";
     return NextResponse.json(
-      { error: "Failed to read prediction history" },
-      { status: 500 }
+      { error: message },
+      { status: message.startsWith("Persistent") ? 503 : 500 }
     );
   }
 }
@@ -137,6 +145,9 @@ export async function PATCH(request: NextRequest) {
     const numericInputs = Object.fromEntries(Object.entries(item.inputs).map(([key, value]) => [key, Number(value)]));
     const record = createRecord({ ...numericInputs, hba1c: parsed.data.actualHbA1c } as Parameters<typeof createRecord>[0], "verified-outcome");
     const workspace = await readTrainingWorkspace(userId);
+    if (workspace.records.some((existing) => recordFingerprint(existing) === recordFingerprint(record))) {
+      return NextResponse.json({ error: "This verified training record is already saved." }, { status: 409 });
+    }
     await saveTrainingWorkspace(userId, { ...workspace, records: [...workspace.records, record], needsRetraining: Boolean(workspace.model) });
     const nextHistory = await updateHistoryItem(userId, item.id, { actualHbA1c: parsed.data.actualHbA1c, verifiedAt: new Date().toISOString() });
     return NextResponse.json({ history: nextHistory });

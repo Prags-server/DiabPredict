@@ -1,14 +1,14 @@
 "use client";
 
 const navigation = [
-  { name: "Features", href: "#features" },
-  { name: "Benefits", href: "#benefits" },
-  { name: "FAQ", href: "#faq" },
+  { name: "Training data", href: "#dataset" },
+  { name: "Prediction", href: "#prediction" },
+  { name: "History", href: "#history" },
 ];
 
 export function MainNav() {
   return (
-    <nav className="hidden md:flex items-center gap-6">
+    <nav aria-label="Workspace navigation" className="hidden md:flex items-center gap-5">
       {navigation.map((item) => (
         <a
           key={item.name}

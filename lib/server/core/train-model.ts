@@ -49,18 +49,18 @@ export async function trainModel({
     shuffle: true,
     callbacks: {
       onEpochEnd: (epoch, logs) => {
-        const valLoss = logs?.val_loss || 0;
+        const valLoss = logs?.val_loss;
 
         console.log(
-          `Epoch ${epoch + 1}/${epochs}: loss = ${logs?.loss.toFixed(
+          `Epoch ${epoch + 1}/${epochs}: loss = ${logs?.loss?.toFixed(
             4
-          )}, val_loss = ${valLoss.toFixed(4)}, mae = ${
+          )}, val_loss = ${valLoss?.toFixed(4) || "N/A"}, mae = ${
             logs?.mae?.toFixed(4) || "N/A"
           }`
         );
 
         // Early stopping logic
-        if (valLoss < bestLoss) {
+        if (valLoss !== undefined && valLoss < bestLoss) {
           bestLoss = valLoss;
           // Save the weights of the best model
           bestModelWeights = {};
@@ -69,7 +69,7 @@ export async function trainModel({
             bestModelWeights![`weight_${i}`] = weight.clone();
           });
           patienceCounter = 0;
-        } else {
+        } else if (valLoss !== undefined) {
           patienceCounter++;
           if (patienceCounter >= earlyStoppingPatience) {
             console.log(`Early stopping triggered after ${epoch + 1} epochs`);
@@ -99,8 +99,9 @@ export async function trainModel({
     batchSize,
   }) as tf.Scalar[];
 
-  console.log(`Final MSE: ${evaluation[0].dataSync()[0].toFixed(4)}`);
-  console.log(`Final MAE: ${evaluation[1].dataSync()[0].toFixed(4)}`);
+  console.log(`Final MSE: ${evaluation[1].dataSync()[0].toFixed(4)}`);
+  console.log(`Final MAE: ${evaluation[2].dataSync()[0].toFixed(4)}`);
+  evaluation.forEach((metric) => metric.dispose());
 
   return history;
 }

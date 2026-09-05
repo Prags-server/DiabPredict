@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
+import { randomUUID } from "crypto";
 import { kv } from "@vercel/kv";
 
 type Prediction = {
@@ -43,6 +44,12 @@ const isKvConfigured = Boolean(
   process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
 );
 
+function ensureStorageConfigured() {
+  if (process.env.NODE_ENV === "production" && !isKvConfigured) {
+    throw new Error("Persistent history storage is not configured. Set KV_REST_API_URL and KV_REST_API_TOKEN.");
+  }
+}
+
 function getHistoryFilePath(userId: string): string {
   return path.join(HISTORY_DIRECTORY, `${userId}.json`);
 }
@@ -61,16 +68,34 @@ async function ensureHistoryFile(userId: string) {
   }
 }
 
+async function writeHistoryFile(userId: string, history: PredictionHistoryItem[]) {
+  const historyFilePath = getHistoryFilePath(userId);
+  const temporaryPath = `${historyFilePath}.${randomUUID()}.tmp`;
+  await fs.writeFile(temporaryPath, JSON.stringify(history, null, 2), "utf-8");
+  await fs.rename(temporaryPath, historyFilePath);
+}
+
+async function readHistoryFile(userId: string): Promise<PredictionHistoryItem[]> {
+  try {
+    return JSON.parse(await fs.readFile(getHistoryFilePath(userId), "utf-8")) as PredictionHistoryItem[];
+  } catch (error) {
+    if (error instanceof SyntaxError) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return JSON.parse(await fs.readFile(getHistoryFilePath(userId), "utf-8")) as PredictionHistoryItem[];
+    }
+    throw error;
+  }
+}
+
 export async function readHistory(userId: string): Promise<PredictionHistoryItem[]> {
+  ensureStorageConfigured();
   if (isKvConfigured) {
     const data = await kv.get<PredictionHistoryItem[]>(getHistoryKey(userId));
     return Array.isArray(data) ? data : [];
   }
 
-  const historyFilePath = getHistoryFilePath(userId);
   await ensureHistoryFile(userId);
-  const rawContent = await fs.readFile(historyFilePath, "utf-8");
-  const parsedContent = JSON.parse(rawContent) as PredictionHistoryItem[];
+  const parsedContent = await readHistoryFile(userId);
   return Array.isArray(parsedContent) ? parsedContent : [];
 }
 
@@ -85,10 +110,9 @@ export async function saveHistory(
     return nextHistory;
   }
 
-  const historyFilePath = getHistoryFilePath(userId);
   const existingHistory = await readHistory(userId);
   const nextHistory = [item, ...existingHistory].slice(0, MAX_HISTORY_ITEMS);
-  await fs.writeFile(historyFilePath, JSON.stringify(nextHistory, null, 2), "utf-8");
+  await writeHistoryFile(userId, nextHistory);
   return nextHistory;
 }
 
@@ -103,10 +127,9 @@ export async function removeHistoryItem(
     return nextHistory;
   }
 
-  const historyFilePath = getHistoryFilePath(userId);
   const existingHistory = await readHistory(userId);
   const nextHistory = existingHistory.filter((item) => item.id !== id);
-  await fs.writeFile(historyFilePath, JSON.stringify(nextHistory, null, 2), "utf-8");
+  await writeHistoryFile(userId, nextHistory);
   return nextHistory;
 }
 
@@ -116,9 +139,8 @@ export async function clearHistory(userId: string): Promise<PredictionHistoryIte
     return [];
   }
 
-  const historyFilePath = getHistoryFilePath(userId);
   await ensureHistoryFile(userId);
-  await fs.writeFile(historyFilePath, "[]", "utf-8");
+  await writeHistoryFile(userId, []);
   return [];
 }
 
@@ -133,7 +155,7 @@ export async function updateHistoryItem(
     await kv.set(getHistoryKey(userId), nextHistory);
   } else {
     await ensureHistoryFile(userId);
-    await fs.writeFile(getHistoryFilePath(userId), JSON.stringify(nextHistory, null, 2), "utf-8");
+    await writeHistoryFile(userId, nextHistory);
   }
   return nextHistory;
 }

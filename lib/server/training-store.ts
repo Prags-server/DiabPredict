@@ -42,6 +42,12 @@ const isKvConfigured = Boolean(
   process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
 );
 
+function ensureStorageConfigured() {
+  if (process.env.NODE_ENV === "production" && !isKvConfigured) {
+    throw new Error("Persistent training storage is not configured. Set KV_REST_API_URL and KV_REST_API_TOKEN.");
+  }
+}
+
 function getKey(userId: string) {
   return `training-workspace:${userId}`;
 }
@@ -54,21 +60,29 @@ function emptyWorkspace(): TrainingWorkspace {
   return { records: [], model: null, modelVersions: [], lastImportAt: null, updatedAt: new Date().toISOString() };
 }
 
+async function readLocalWorkspace(userId: string): Promise<TrainingWorkspace> {
+  try {
+    const raw = await fs.readFile(getFilePath(userId), "utf-8");
+    return JSON.parse(raw) as TrainingWorkspace;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyWorkspace();
+    if (error instanceof SyntaxError) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return JSON.parse(await fs.readFile(getFilePath(userId), "utf-8")) as TrainingWorkspace;
+    }
+    throw error;
+  }
+}
+
 export async function readTrainingWorkspace(userId: string): Promise<TrainingWorkspace> {
+  ensureStorageConfigured();
   if (isKvConfigured) {
     const stored = await kv.get<TrainingWorkspace>(getKey(userId));
     return stored && Array.isArray(stored.records) ? stored : emptyWorkspace();
   }
 
-  const filePath = getFilePath(userId);
-  try {
-    const raw = await fs.readFile(filePath, "utf-8");
-    const stored = JSON.parse(raw) as TrainingWorkspace;
-    return Array.isArray(stored.records) ? stored : emptyWorkspace();
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return emptyWorkspace();
-    throw error;
-  }
+  const stored = await readLocalWorkspace(userId);
+  return Array.isArray(stored.records) ? stored : emptyWorkspace();
 }
 
 export async function saveTrainingWorkspace(userId: string, workspace: TrainingWorkspace) {
@@ -79,7 +93,10 @@ export async function saveTrainingWorkspace(userId: string, workspace: TrainingW
   }
 
   await fs.mkdir(DATA_DIRECTORY, { recursive: true });
-  await fs.writeFile(getFilePath(userId), JSON.stringify(next, null, 2), "utf-8");
+  const filePath = getFilePath(userId);
+  const temporaryPath = `${filePath}.${randomUUID()}.tmp`;
+  await fs.writeFile(temporaryPath, JSON.stringify(next, null, 2), "utf-8");
+  await fs.rename(temporaryPath, filePath);
   return next;
 }
 

@@ -52,7 +52,6 @@ function validationTensors(records: TrainingRecord[], stats: NormalizationStats)
 function serializeModel(model: tf.Sequential, stats: NormalizationStats, sampleCount: number, metrics: SerializedModel["metrics"]): SerializedModel {
   const weights = model.getWeights();
   const serialized = weights.map((weight) => ({ shape: weight.shape, values: Array.from(weight.dataSync()) }));
-  weights.forEach((weight) => weight.dispose());
   return { id: randomUUID(), trainedAt: new Date().toISOString(), sampleCount, metrics, normalization: serializeStats(stats), weights: serialized };
 }
 

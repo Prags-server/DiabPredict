@@ -15,7 +15,7 @@ import { z } from "zod";
 
 const MAX_CSV_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 const MAX_TRAINING_ROWS = 5_000;
-const valuesSchema = z.object({
+const valuesShape = z.object({
   age: z.coerce.number().finite().min(1).max(120),
   gender: z.coerce.number().int().min(0).max(1),
   height: z.coerce.number().finite().min(50).max(250),
@@ -28,12 +28,19 @@ const valuesSchema = z.object({
   waist: z.coerce.number().finite().min(30).max(250),
   hip: z.coerce.number().finite().min(30).max(250),
   hba1c: z.coerce.number().finite().min(2).max(20),
-}).superRefine((values, context) => {
+});
+
+function validateBloodPressure(
+  values: z.infer<typeof valuesShape>,
+  context: z.RefinementCtx
+) {
   if (values.diastolic_bp >= values.systolic_bp) {
     context.addIssue({ code: z.ZodIssueCode.custom, path: ["diastolic_bp"], message: "must be lower than systolic_bp" });
   }
-});
-const updateSchema = valuesSchema.extend({ id: z.string().uuid() });
+}
+
+const valuesSchema = valuesShape.superRefine(validateBloodPressure);
+const updateSchema = valuesShape.extend({ id: z.string().uuid() }).superRefine(validateBloodPressure);
 
 function userId(request: NextRequest) {
   return getSessionFromRequest(request)?.userId ?? null;
@@ -61,8 +68,12 @@ export async function GET(request: NextRequest) {
         metrics: model.metrics ?? null,
       })),
     });
-  } catch {
-    return NextResponse.json({ error: "Failed to load saved dataset" }, { status: 500 });
+  } catch (error) {
+    console.error("Failed to load saved dataset:", error);
+    const message = error instanceof Error && error.message.includes("Persistent training storage")
+      ? error.message
+      : "Failed to load saved dataset";
+    return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 500 });
   }
 }
 
@@ -137,7 +148,10 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error("Dataset import failed:", error);
-    return NextResponse.json({ error: "Failed to import training dataset" }, { status: 500 });
+    const message = error instanceof Error && error.message.includes("Persistent training storage")
+      ? error.message
+      : "Failed to import training dataset";
+    return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 500 });
   }
 }
 
@@ -162,7 +176,10 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ summary: workspaceSummary(next), records: next.records.slice(0, 100) });
   } catch (error) {
     console.error("Dataset update failed:", error);
-    return NextResponse.json({ error: "Failed to update training record" }, { status: 500 });
+    const message = error instanceof Error && error.message.includes("Persistent training storage")
+      ? error.message
+      : "Failed to update training record";
+    return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 500 });
   }
 }
 
@@ -182,6 +199,9 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ summary: workspaceSummary(next), records: next.records.slice(0, 100) });
   } catch (error) {
     console.error("Dataset deletion failed:", error);
-    return NextResponse.json({ error: "Failed to remove training record" }, { status: 500 });
+    const message = error instanceof Error && error.message.includes("Persistent training storage")
+      ? error.message
+      : "Failed to remove training record";
+    return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 500 });
   }
 }

@@ -758,7 +758,7 @@ export function PatientForm({
         </Card>
       )}
 
-      <Card className="border-none shadow-sm">
+      <Card id="history" className="scroll-mt-24 border-none shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Prediction History</CardTitle>
           <Button

@@ -19,10 +19,19 @@ The system is designed to be a screening test tool for experiment and should be 
 1. Import this repository in Vercel.
 2. Add environment variables from [.env.example](C:/Users/prags/OneDrive/Desktop/DiabPredict/DiabPredict/.env.example):
    - `SESSION_SECRET` (required in production)
-   - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (recommended for persistent history)
+   - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (required for persistent training data and history)
 3. Deploy.
 
-Without KV, history falls back to local filesystem storage, which is not durable on serverless production.
+The application intentionally refuses to use local filesystem storage in production. Vercel's filesystem is not durable between deployments or invocations, so configure a Vercel KV/Upstash Redis integration before inviting clients.
+
+### Pre-client deployment checklist
+
+- Set a long random `SESSION_SECRET`.
+- Configure `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel project and every production environment.
+- Run `npm run build` locally.
+- Import a representative, clinically verified CSV and confirm the dataset count.
+- Train the initial model, run a prediction, and verify that history persists after a reload.
+- Treat predictions as screening support only; they are not a diagnosis.
 
 ## Training CSV Format
 

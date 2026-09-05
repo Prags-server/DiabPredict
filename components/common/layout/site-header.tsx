@@ -1,6 +1,7 @@
 "use client";
 
 import { ThemeToggle } from "@/components/common/theme-toggle";
+import { MainNav } from "@/components/common/layout/main-nav";
 import { Button } from "@/components/ui/button";
 import { FileText, Menu, RotateCw } from "lucide-react";
 import { Playfair_Display } from "next/font/google";
@@ -41,6 +42,8 @@ export function SiteHeader() {
         </div>
 
         <div className="flex-1" />
+        <MainNav />
+        <div className="flex-1" />
 
         {/* Desktop Navigation */}
         <div className="hidden sm:flex items-center space-x-4">
@@ -80,7 +83,11 @@ export function SiteHeader() {
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="sm:hidden px-4 py-2 border-t bg-background">
-          <div className="flex flex-col space-y-2 py-2"></div>
+          <nav aria-label="Mobile workspace navigation" className="flex flex-col space-y-2 py-2">
+            <a href="#dataset" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-2 py-2 text-sm font-medium hover:bg-muted">Training data</a>
+            <a href="#prediction" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-2 py-2 text-sm font-medium hover:bg-muted">Prediction</a>
+            <a href="#history" onClick={() => setMobileMenuOpen(false)} className="rounded-md px-2 py-2 text-sm font-medium hover:bg-muted">History</a>
+          </nav>
         </div>
       )}
     </header>
