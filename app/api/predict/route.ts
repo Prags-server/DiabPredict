@@ -1,7 +1,8 @@
-import { parseCSV } from "@/lib/server/core/parser";
 import { getSessionFromRequest } from "@/lib/server/auth-session";
 import { predictPatient } from "@/lib/server/core/predict";
-import { prepareData } from "@/lib/server/core/prepare";
+import { readTrainingWorkspace, workspaceSummary } from "@/lib/server/training-store";
+import { saveHistory } from "@/lib/server/history-store";
+import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { getModel } from "./helper";
@@ -11,8 +12,6 @@ export const config = {
 };
 
 const PATIENT_FEATURE_COUNT = 11;
-const MAX_CSV_FILE_SIZE_BYTES = 2 * 1024 * 1024;
-
 const patientInputSchema = z.array(z.number().finite()).length(PATIENT_FEATURE_COUNT);
 
 export async function POST(request: NextRequest) {
@@ -23,27 +22,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const formData = await request.formData();
-    const file = formData.get("file") as File;
     const patientData = formData.get("patientData") as string;
-    const resetTraining = formData.get("resetTraining") === "true";
 
-    if (!file || !patientData) {
+    if (!patientData) {
       return NextResponse.json(
-        { error: "Missing file or patient data" },
-        { status: 400 }
-      );
-    }
-
-    if (file.size > MAX_CSV_FILE_SIZE_BYTES) {
-      return NextResponse.json(
-        { error: "CSV file is too large. Maximum size is 2MB." },
-        { status: 400 }
-      );
-    }
-
-    if (!file.name.toLowerCase().endsWith(".csv")) {
-      return NextResponse.json(
-        { error: "Invalid file type. Please upload a CSV file." },
+        { error: "Missing patient data" },
         { status: 400 }
       );
     }
@@ -57,20 +40,44 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const csvData = await parseCSV(file);
-    const trainingData = await prepareData(csvData);
-
-    const modelState = await getModel({ trainingData, resetTraining });
+    const workspace = await readTrainingWorkspace(session.userId);
+    const modelState = await getModel({ userId: session.userId, records: workspace.records });
 
     const prediction = await predictPatient(
       parsedInput.data,
       modelState.model,
-      modelState.stats || trainingData.stats
+      modelState.stats
     );
 
-    return NextResponse.json({
-      csvData,
+    modelState.model.dispose();
+    if (modelState.stats.mode === "zscore") {
+      modelState.stats.mean.dispose();
+      modelState.stats.std.dispose();
+    } else {
+      modelState.stats.min.dispose();
+      modelState.stats.max.dispose();
+    }
+
+    const updatedWorkspace = modelState.trained
+      ? await readTrainingWorkspace(session.userId)
+      : workspace;
+
+    const history = await saveHistory(session.userId, {
+      id: randomUUID(),
+      createdAt: new Date().toISOString(),
       prediction,
+      inputs: {
+        age: String(parsedInput.data[0]), gender: String(parsedInput.data[1]), height: String(parsedInput.data[2]),
+        weight: String(parsedInput.data[3]), bmi: String(parsedInput.data[4]), systolic_bp: String(parsedInput.data[5]),
+        diastolic_bp: String(parsedInput.data[6]), rbs: String(parsedInput.data[7]), fbs: String(parsedInput.data[8]),
+        waist: String(parsedInput.data[9]), hip: String(parsedInput.data[10]),
+      },
+    });
+
+    return NextResponse.json({
+      prediction,
+      dataset: workspaceSummary(updatedWorkspace),
+      history,
     });
   } catch (error) {
     console.error("Prediction error:", error);

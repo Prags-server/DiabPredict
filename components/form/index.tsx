@@ -1,7 +1,7 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { FileUp, Upload } from "lucide-react";
+import { FileUp, RefreshCw, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -10,7 +10,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -23,41 +22,25 @@ import { Input } from "@/components/ui/input";
 import { ErrorBoundary } from "../common/error-boundary";
 import HbA1cResultCard from "./details";
 
+const numericField = (label: string, min: number, max: number) =>
+  z.string().refine((value) => Number.isFinite(Number(value)) && Number(value) >= min && Number(value) <= max, {
+    message: `${label} must be between ${min} and ${max}`,
+  });
+
 const formSchema = z.object({
-  age: z.string().refine((val) => Number(val) > 0, {
-    message: "Age must be greater than 0",
-  }),
+  age: numericField("Age", 1, 120),
   gender: z.string().refine((val) => val === "0" || val === "1", {
     message: "Gender must be 0 (Female) or 1 (Male)",
   }),
-  height: z.string().refine((val) => Number(val) > 0, {
-    message: "Height must be greater than 0",
-  }),
-  weight: z.string().refine((val) => Number(val) > 0, {
-    message: "Weight must be greater than 0",
-  }),
-  bmi: z.string().refine((val) => Number(val) > 0, {
-    message: "BMI must be greater than 0",
-  }),
-  systolic_bp: z.string().refine((val) => Number(val) > 0, {
-    message: "Systolic BP must be greater than 0",
-  }),
-  diastolic_bp: z.string().refine((val) => Number(val) > 0, {
-    message: "Diastolic BP must be greater than 0",
-  }),
-  rbs: z.string().refine((val) => Number(val) > 0, {
-    message: "Random blood sugar must be greater than 0",
-  }),
-  fbs: z.string().refine((val) => Number(val) > 0, {
-    message: "Fasting blood sugar must be greater than 0",
-  }),
-  waist: z.string().refine((val) => Number(val) > 0, {
-    message: "Waist must be greater than 0",
-  }),
-  hip: z.string().refine((val) => Number(val) > 0, {
-    message: "Hip must be greater than 0",
-  }),
-  resetTraining: z.boolean().default(false),
+  height: numericField("Height", 50, 250),
+  weight: numericField("Weight", 10, 400),
+  bmi: numericField("BMI", 10, 80),
+  systolic_bp: numericField("Systolic BP", 50, 300),
+  diastolic_bp: numericField("Diastolic BP", 30, 200),
+  rbs: numericField("Random blood sugar", 20, 700),
+  fbs: numericField("Fasting blood sugar", 20, 700),
+  waist: numericField("Waist", 30, 250),
+  hip: numericField("Hip", 30, 250),
 });
 
 type Prediction = {
@@ -75,7 +58,27 @@ type HistoryItem = {
   id: string;
   createdAt: string;
   prediction: Prediction;
-  inputs: Omit<z.infer<typeof formSchema>, "resetTraining">;
+  inputs: z.infer<typeof formSchema>;
+  actualHbA1c?: number;
+  verifiedAt?: string;
+};
+
+type DatasetSummary = {
+  recordCount: number;
+  verifiedOutcomeCount: number;
+  lastImportAt: string | null;
+  lastTrainedAt: string | null;
+  modelSampleCount: number;
+  pendingRetraining: boolean;
+  modelMetrics: { mae: number; mse: number; validationMae?: number; validationMse?: number } | null;
+  modelVersionCount: number;
+};
+
+type ModelVersion = {
+  id: string;
+  trainedAt: string;
+  sampleCount: number;
+  metrics: { mae: number; mse: number; validationMae?: number; validationMse?: number } | null;
 };
 
 type UserSession = {
@@ -85,11 +88,18 @@ type UserSession = {
 
 export function PatientForm({
   onDataChange,
+  datasetRevision,
 }: {
-  onDataChange: (data: Record<string, string>[]) => void;
+  onDataChange: (data: Record<string, string | number>[]) => void;
+  datasetRevision: number;
 }) {
-  const [file, setFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [dataset, setDataset] = useState<DatasetSummary | null>(null);
+  const [modelHistory, setModelHistory] = useState<ModelVersion[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [importFeedback, setImportFeedback] = useState<string[]>([]);
+  const [retraining, setRetraining] = useState(false);
+  const [retrainingOutcome, setRetrainingOutcome] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [prediction, setPrediction] = useState<Prediction | null>(null);
   const [submissionError, setSubmissionError] = useState<string>("");
@@ -115,7 +125,6 @@ export function PatientForm({
       fbs: "",
       waist: "",
       hip: "",
-      resetTraining: false,
     },
   });
 
@@ -139,6 +148,15 @@ export function PatientForm({
     }
   }, []);
 
+  const loadDataset = useCallback(async () => {
+    const response = await fetch("/api/dataset");
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || "Failed to load saved dataset");
+    setDataset(result.summary || null);
+    setModelHistory(result.modelHistory || []);
+    onDataChange(result.records || []);
+  }, [onDataChange]);
+
   const loadSession = useCallback(async () => {
     setAuthLoading(true);
     try {
@@ -150,7 +168,7 @@ export function PatientForm({
       if (result.session) {
         setSession(result.session);
         setAuthName(result.session.name);
-        await loadHistory();
+        await Promise.all([loadHistory(), loadDataset()]);
       } else {
         setSession(null);
         setHistory([]);
@@ -162,19 +180,46 @@ export function PatientForm({
     } finally {
       setAuthLoading(false);
     }
-  }, [loadHistory]);
+  }, [loadDataset, loadHistory]);
 
   useEffect(() => {
     loadSession();
   }, [loadSession]);
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  useEffect(() => {
+    if (!session || datasetRevision === 0) return;
+    loadDataset().catch((error) => setSubmissionError(error instanceof Error ? error.message : "Failed to refresh saved dataset."));
+  }, [datasetRevision, loadDataset, session]);
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
 
-    setFile(selectedFile);
     setFileName(selectedFile.name);
     setSubmissionError("");
+    setImportFeedback([]);
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", selectedFile);
+      const response = await fetch("/api/dataset", { method: "POST", body: formData });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to save training data");
+      setDataset(result.summary || null);
+      onDataChange(result.records || []);
+      const feedback = [`${result.imported} valid record${result.imported === 1 ? "" : "s"} saved.`];
+      if (result.duplicatesSkipped) feedback.push(`${result.duplicatesSkipped} duplicate record${result.duplicatesSkipped === 1 ? " was" : "s were"} skipped.`);
+      if (result.invalidRows?.length) {
+        const examples = result.invalidRows.slice(0, 3).map((row: { line: number; issues: string[] }) => `Line ${row.line}: ${row.issues.join(", ")}`);
+        feedback.push(`${result.invalidRows.length} invalid row${result.invalidRows.length === 1 ? " was" : "s were"} skipped. ${examples.join(" · ")}`);
+      }
+      setImportFeedback(feedback);
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Failed to save training data.");
+    } finally {
+      setUploading(false);
+      event.target.value = "";
+    }
   };
 
   const signIn = async () => {
@@ -198,7 +243,7 @@ export function PatientForm({
       }
 
       setSession(result.session);
-      await loadHistory();
+      await Promise.all([loadHistory(), loadDataset()]);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to sign in to profile.";
@@ -219,6 +264,7 @@ export function PatientForm({
       setSession(null);
       setHistory([]);
       setPrediction(null);
+      setDataset(null);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to sign out.";
@@ -232,17 +278,10 @@ export function PatientForm({
       return;
     }
 
-    if (!file) {
-      setSubmissionError("Please upload a training data CSV file before predicting.");
-      return;
-    }
-
     setIsLoading(true);
     setSubmissionError("");
     try {
       const formData = new FormData();
-      formData.append("file", file);
-
       const patientData = [
         values.age,
         values.gender,
@@ -258,7 +297,6 @@ export function PatientForm({
       ].join(",");
 
       formData.append("patientData", patientData);
-      formData.append("resetTraining", values.resetTraining.toString());
 
       const response = await fetch("/api/predict", {
         method: "POST",
@@ -269,38 +307,13 @@ export function PatientForm({
       if (!response.ok) {
         throw new Error(result.error || "Prediction request failed");
       }
-      onDataChange(result.csvData || []);
+      setDataset(result.dataset || dataset);
 
       if (result.prediction !== undefined) {
         setPrediction(result.prediction);
-        const historyResponse = await fetch("/api/history", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            prediction: result.prediction,
-            inputs: {
-              age: values.age,
-              gender: values.gender,
-              height: values.height,
-              weight: values.weight,
-              bmi: values.bmi,
-              systolic_bp: values.systolic_bp,
-              diastolic_bp: values.diastolic_bp,
-              rbs: values.rbs,
-              fbs: values.fbs,
-              waist: values.waist,
-              hip: values.hip,
-            },
-          }),
-        });
-        const historyResult = await historyResponse.json();
-        if (!historyResponse.ok) {
-          throw new Error(historyResult.error || "Failed to save prediction history");
-        }
-        setHistory(historyResult.history || []);
+        setHistory(result.history || []);
       }
 
-      form.setValue("resetTraining", false);
     } catch (error) {
       const message =
         error instanceof Error
@@ -325,6 +338,79 @@ export function PatientForm({
     form.setValue("fbs", item.inputs.fbs);
     form.setValue("waist", item.inputs.waist);
     form.setValue("hip", item.inputs.hip);
+  };
+
+  const retrainModel = async () => {
+    setRetraining(true);
+    setSubmissionError("");
+    setRetrainingOutcome("");
+    try {
+      const response = await fetch("/api/model/retrain", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Retraining failed");
+      setDataset(result.summary || null);
+      setRetrainingOutcome(result.message || "Model retrained.");
+      await loadDataset();
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Retraining failed.");
+    } finally {
+      setRetraining(false);
+    }
+  };
+
+  const addVerifiedOutcome = async (item: HistoryItem) => {
+    const entered = window.prompt("Enter the verified laboratory HbA1c result (%). Only actual lab results should be added to training.");
+    if (entered === null) return;
+    try {
+      const response = await fetch("/api/history", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: item.id, actualHbA1c: entered }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to save verified outcome");
+      setHistory(result.history || []);
+      await loadDataset();
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Failed to save verified outcome.");
+    }
+  };
+
+  const saveManualTrainingRecord = async () => {
+    const isValid = await form.trigger();
+    if (!isValid) return;
+    const actualHbA1c = window.prompt("Enter the actual laboratory HbA1c result (%). This record will be saved for the next training run.");
+    if (actualHbA1c === null) return;
+    try {
+      const response = await fetch("/api/dataset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form.getValues(), hba1c: actualHbA1c }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to save training record");
+      setDataset(result.summary || null);
+      onDataChange(result.records || []);
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Failed to save training record.");
+    }
+  };
+
+  const restoreModel = async (version: ModelVersion) => {
+    if (!window.confirm(`Restore the model trained on ${new Date(version.trainedAt).toLocaleString()}?`)) return;
+    try {
+      const response = await fetch("/api/model/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: version.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to restore model");
+      setRetrainingOutcome(result.message || "Model restored.");
+      await loadDataset();
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Failed to restore model.");
+    }
   };
 
   const removeHistoryItem = async (id: string) => {
@@ -399,14 +485,43 @@ export function PatientForm({
 
       <Card className="border-none shadow-sm">
         <CardHeader>
-          <CardTitle>Upload Training Data</CardTitle>
+          <CardTitle>Saved training dataset</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-md bg-muted p-3"><p className="text-muted-foreground">Validated records</p><p className="text-lg font-semibold">{dataset?.recordCount ?? 0}</p></div>
+            <div className="rounded-md bg-muted p-3"><p className="text-muted-foreground">Model status</p><p className="text-lg font-semibold">{dataset?.lastTrainedAt ? "Ready" : "Not trained"}</p></div>
+          </div>
+          {dataset?.modelMetrics ? (
+            <p className="text-xs text-muted-foreground">
+              {dataset.modelMetrics.validationMae !== undefined
+                ? `Validation MAE ${dataset.modelMetrics.validationMae}% · validation MSE ${dataset.modelMetrics.validationMse}`
+                : `Training MAE ${dataset.modelMetrics.mae}% · training MSE ${dataset.modelMetrics.mse}`}
+              {dataset.modelVersionCount ? ` · ${dataset.modelVersionCount} prior version${dataset.modelVersionCount === 1 ? "" : "s"} retained` : ""}
+            </p>
+          ) : null}
+          {retrainingOutcome ? <Alert><AlertDescription>{retrainingOutcome}</AlertDescription></Alert> : null}
+          {modelHistory.length ? (
+            <details className="rounded-md border p-3 text-sm">
+              <summary className="cursor-pointer font-medium">Previous model versions ({modelHistory.length})</summary>
+              <div className="mt-3 space-y-2">
+                {modelHistory.map((version) => (
+                  <div key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 p-2">
+                    <span>{new Date(version.trainedAt).toLocaleString()} · {version.metrics?.validationMae !== undefined ? `validation MAE ${version.metrics.validationMae}%` : `${version.sampleCount} records`}</span>
+                    <Button type="button" size="sm" variant="outline" onClick={() => restoreModel(version)}>Restore</Button>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+          {dataset?.pendingRetraining ? (
+            <Alert><AlertDescription>New verified records are ready. Retrain to include them in the saved model.</AlertDescription></Alert>
+          ) : null}
           <div className="flex flex-col space-y-1.5">
             <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors hover:border-primary/50">
               <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground mb-2">
-                {fileName || "Drag and drop or click to upload"}
+                {fileName || "Import a CSV once; it stays available to this profile"}
               </p>
               <Input
                 id="file-upload"
@@ -419,13 +534,20 @@ export function PatientForm({
                 variant="outline"
                 onClick={() => document.getElementById("file-upload")?.click()}
                 className="mt-2"
-                disabled={!isAuthenticated}
+                disabled={!isAuthenticated || uploading}
               >
                 <Upload className="mr-2 h-4 w-4" />
-                Select CSV File
+                {uploading ? "Saving dataset..." : "Import CSV"}
               </Button>
             </div>
           </div>
+          {importFeedback.length ? <Alert><AlertDescription><ul className="space-y-1">{importFeedback.map((message) => <li key={message}>{message}</li>)}</ul></AlertDescription></Alert> : null}
+          <Button type="button" variant="secondary" onClick={retrainModel} disabled={!isAuthenticated || retraining || (dataset?.recordCount ?? 0) < 5}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            {retraining ? "Retraining..." : "Retrain saved model"}
+          </Button>
+          <p className="text-xs text-muted-foreground">Only validated spreadsheet records and verified laboratory outcomes are used for training.</p>
+          <a href="/training-template.csv" download className="text-xs font-medium text-primary underline underline-offset-4">Download the CSV template</a>
         </CardContent>
       </Card>
 
@@ -603,25 +725,8 @@ export function PatientForm({
                 />
               </div>
 
-              <FormField
-                control={form.control}
-                name="resetTraining"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                    <FormControl>
-                      <Checkbox
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                    <div className="space-y-1 leading-none">
-                      <FormLabel>Use new training data on server</FormLabel>
-                    </div>
-                  </FormItem>
-                )}
-              />
-
-              <Button type="submit" disabled={isLoading || !isAuthenticated}>
+              <div className="flex flex-wrap gap-2">
+                <Button type="submit" disabled={isLoading || !isAuthenticated}>
                 {isLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -631,6 +736,10 @@ export function PatientForm({
                   "Predict"
                 )}
               </Button>
+                <Button type="button" variant="outline" onClick={saveManualTrainingRecord} disabled={!isAuthenticated}>
+                  Save verified training record
+                </Button>
+              </div>
             </form>
           </Form>
         </CardContent>
@@ -686,6 +795,9 @@ export function PatientForm({
                     <p className="text-xs text-muted-foreground">
                       {new Date(item.createdAt).toLocaleString()}
                     </p>
+                    {item.actualHbA1c !== undefined ? (
+                      <p className="text-xs text-green-700">Verified lab HbA1c: {item.actualHbA1c}%</p>
+                    ) : null}
                   </div>
                   <div className="flex gap-2">
                     <Button
@@ -696,6 +808,16 @@ export function PatientForm({
                     >
                       Load
                     </Button>
+                    {item.actualHbA1c === undefined ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => addVerifiedOutcome(item)}
+                      >
+                        Add lab result
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       variant="ghost"

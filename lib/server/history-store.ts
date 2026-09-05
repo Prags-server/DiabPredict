@@ -32,6 +32,8 @@ export type PredictionHistoryItem = {
   createdAt: string;
   prediction: Prediction;
   inputs: PredictionInputs;
+  actualHbA1c?: number;
+  verifiedAt?: string;
 };
 
 const DATA_DIRECTORY = path.join(process.cwd(), ".data");
@@ -118,4 +120,20 @@ export async function clearHistory(userId: string): Promise<PredictionHistoryIte
   await ensureHistoryFile(userId);
   await fs.writeFile(historyFilePath, "[]", "utf-8");
   return [];
+}
+
+export async function updateHistoryItem(
+  userId: string,
+  id: string,
+  updates: Pick<PredictionHistoryItem, "actualHbA1c" | "verifiedAt">
+): Promise<PredictionHistoryItem[]> {
+  const existingHistory = await readHistory(userId);
+  const nextHistory = existingHistory.map((item) => item.id === id ? { ...item, ...updates } : item);
+  if (isKvConfigured) {
+    await kv.set(getHistoryKey(userId), nextHistory);
+  } else {
+    await ensureHistoryFile(userId);
+    await fs.writeFile(getHistoryFilePath(userId), JSON.stringify(nextHistory, null, 2), "utf-8");
+  }
+  return nextHistory;
 }

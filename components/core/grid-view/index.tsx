@@ -1,193 +1,95 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  ColumnDef,
-  flexRender,
-  getCoreRowModel,
-  getPaginationRowModel,
-  useReactTable,
-} from "@tanstack/react-table";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
-} from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 
-interface GridViewProps {
-  initialRows: number;
-  initialCols: number;
-  data: string[][];
-}
+const fields = [
+  ["age", "Age"], ["gender", "Gender"], ["height", "Height"], ["weight", "Weight"], ["bmi", "BMI"],
+  ["systolic_bp", "Systolic BP"], ["diastolic_bp", "Diastolic BP"], ["rbs", "RBS"], ["fbs", "FBS"],
+  ["waist", "Waist"], ["hip", "Hip"], ["hba1c", "HbA1c"],
+] as const;
 
-export function GridView({ initialRows, initialCols, data }: GridViewProps) {
-  const [pagination, setPagination] = useState({
-    pageIndex: 0,
-    pageSize: 15,
-  });
+type FieldName = (typeof fields)[number][0];
+export type DatasetRecord = Record<FieldName, string | number> & { id: string; source?: string; createdAt?: string };
 
-  // Generate column definitions based on data or initial columns
-  const generateColumns = (): ColumnDef<string[]>[] => {
-    if (data.length > 0) {
-      // Use the first row to determine column headers
-      return data[0].map((_, index) => ({
-        accessorFn: (row: string[]) => row[index],
-        id: `col${index}`,
-        header: () => {
-          const headers = [
-            "Age",
-            "Gender",
-            "Height",
-            "Weight",
-            "BMI",
-            "Systolic BP",
-            "Diastolic BP",
-            "RBS",
-            "FBS",
-            "Waist",
-            "Hip",
-            "HbA1c",
-          ];
-          return headers[index] || `Column ${index + 1}`;
-        },
-        cell: ({ getValue }) => (
-          <div className="py-2">{getValue() as string}</div>
-        ),
-      }));
-    } else {
-      return Array.from({ length: initialCols }).map((_, index) => ({
-        accessorFn: (row: string[]) => row[index],
-        id: `col${index}`,
-        header: () => `Column ${index + 1}`,
-        cell: ({ getValue }) => (
-          <div className="py-2">{getValue() as string}</div>
-        ),
-      }));
+export function GridView({ data, onRecordsChange }: { data: DatasetRecord[]; onRecordsChange: (records: DatasetRecord[]) => void }) {
+  const [editing, setEditing] = useState<DatasetRecord | null>(null);
+  const [values, setValues] = useState<Record<FieldName, string> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const beginEdit = (record: DatasetRecord) => {
+    setEditing(record);
+    setValues(Object.fromEntries(fields.map(([key]) => [key, String(record[key] ?? "")])) as Record<FieldName, string>);
+    setError("");
+  };
+
+  const saveEdit = async () => {
+    if (!editing || !values) return;
+    setBusy(true);
+    try {
+      const response = await fetch("/api/dataset", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editing.id, ...values }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to update record");
+      onRecordsChange(result.records || []);
+      setEditing(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Failed to update record.");
+    } finally {
+      setBusy(false);
     }
   };
 
-  const columns = generateColumns();
-
-  const rows =
-    data.length > 0
-      ? data
-      : Array.from({ length: initialRows }).map(() =>
-          Array.from({ length: initialCols }).map(() => "")
-        );
-
-  const table = useReactTable({
-    data: rows,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    onPaginationChange: setPagination,
-    state: {
-      pagination,
-    },
-  });
+  const removeRecord = async (record: DatasetRecord) => {
+    if (!window.confirm("Remove this training record? Retraining will be required before the model uses the revised dataset.")) return;
+    setBusy(true);
+    try {
+      const response = await fetch(`/api/dataset?id=${encodeURIComponent(record.id)}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Failed to remove record");
+      onRecordsChange(result.records || []);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Failed to remove record.");
+    } finally {
+      setBusy(false);
+    }
+  };
 
   return (
-    <div className="p-4">
-      <div className="rounded-md border">
+    <section className="p-4 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div><h2 className="text-lg font-semibold">Training records</h2><p className="text-sm text-muted-foreground">Review and correct saved clinical rows for this profile.</p></div>
+        <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium">{data.length} saved</span>
+      </div>
+      {error ? <p className="mb-3 text-sm text-destructive">{error}</p> : null}
+      <div className="overflow-x-auto rounded-md border">
         <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id}>
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            ))}
-          </TableHeader>
+          <TableHeader><TableRow>{fields.map(([, label]) => <TableHead key={label}>{label}</TableHead>)}<TableHead>Source</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader>
           <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No data available
-                </TableCell>
-              </TableRow>
-            )}
+            {data.length ? data.map((record) => <TableRow key={record.id}>
+              {fields.map(([key]) => <TableCell key={key}>{record[key]}</TableCell>)}
+              <TableCell className="capitalize text-muted-foreground">{record.source?.replace("-", " ") || "import"}</TableCell>
+              <TableCell className="text-right"><div className="flex justify-end gap-1"><Button type="button" size="icon" variant="ghost" onClick={() => beginEdit(record)} disabled={busy} aria-label="Edit record"><Pencil className="h-4 w-4" /></Button><Button type="button" size="icon" variant="ghost" onClick={() => removeRecord(record)} disabled={busy} aria-label="Remove record"><Trash2 className="h-4 w-4" /></Button></div></TableCell>
+            </TableRow>) : <TableRow><TableCell colSpan={fields.length + 2} className="h-28 text-center text-muted-foreground">Import a CSV or save a verified record to begin.</TableCell></TableRow>}
           </TableBody>
         </Table>
       </div>
 
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.setPageIndex(0)}
-          disabled={!table.getCanPreviousPage()}
-        >
-          <ChevronsLeft className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="flex items-center gap-1 text-sm">
-          <div>Page</div>
-          <strong>
-            {table.getState().pagination.pageIndex + 1} of{" "}
-            {table.getPageCount()}
-          </strong>
-        </span>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => table.setPageIndex(table.getPageCount() - 1)}
-          disabled={!table.getCanNextPage()}
-        >
-          <ChevronsRight className="h-4 w-4" />
-        </Button>
-      </div>
-    </div>
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader><DialogTitle>Edit training record</DialogTitle><DialogDescription>Use only verified clinical values. Saving marks the model for retraining.</DialogDescription></DialogHeader>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {fields.map(([key, label]) => <div key={key} className="space-y-1"><Label htmlFor={`record-${key}`}>{label}</Label><Input id={`record-${key}`} type="number" step="any" value={values?.[key] ?? ""} onChange={(event) => setValues((current) => current ? { ...current, [key]: event.target.value } : current)} /></div>)}
+          </div>
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setEditing(null)}>Cancel</Button><Button type="button" onClick={saveEdit} disabled={busy}>{busy ? "Saving..." : "Save changes"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }

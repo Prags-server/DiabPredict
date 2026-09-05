@@ -30,6 +30,14 @@ Upload a CSV file with these headers (in this order):
 
 `age,gender,height,weight,bmi,systolic_bp,diastolic_bp,rbs,fbs,waist,hip,hba1c`
 
+## Persistent dataset and model
+
+- Import a valid training CSV once per signed-in profile. Valid rows are stored and deduplicated, so the same CSV does not need to be uploaded before every prediction.
+- The first prediction trains a model from the saved dataset; its weights and normalization values are persisted with the profile. Later predictions reuse that saved model.
+- Use **Retrain saved model** after importing more records or recording verified outcomes.
+- From Prediction History, use **Add lab result** only when the actual laboratory HbA1c becomes available. That verified result is added to the next training set; predictions themselves are never used as labels.
+- At least five validated records are required before training can begin. In production, configure Vercel KV for durable storage across serverless deployments.
+
 ## Prediction History Persistence
 
 - Predictions are saved by the backend API in Vercel KV when configured.

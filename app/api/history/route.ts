@@ -4,7 +4,9 @@ import {
   readHistory,
   removeHistoryItem,
   saveHistory,
+  updateHistoryItem,
 } from "@/lib/server/history-store";
+import { createRecord, readTrainingWorkspace, saveTrainingWorkspace } from "@/lib/server/training-store";
 import { getSessionFromRequest } from "@/lib/server/auth-session";
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -116,5 +118,30 @@ export async function DELETE(request: NextRequest) {
       { error: "Failed to delete prediction history" },
       { status: 500 }
     );
+  }
+}
+
+const verifiedOutcomeSchema = z.object({ id: z.string().uuid(), actualHbA1c: z.coerce.number().finite().min(2).max(20) });
+
+export async function PATCH(request: NextRequest) {
+  const userId = getAuthorizedUserId(request);
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const parsed = verifiedOutcomeSchema.safeParse(await request.json());
+    if (!parsed.success) return NextResponse.json({ error: "Enter a valid HbA1c result between 2 and 20." }, { status: 400 });
+    const history = await readHistory(userId);
+    const item = history.find((entry) => entry.id === parsed.data.id);
+    if (!item) return NextResponse.json({ error: "Prediction record not found" }, { status: 404 });
+    if (item.actualHbA1c !== undefined) return NextResponse.json({ error: "This prediction already has a verified outcome." }, { status: 409 });
+
+    const numericInputs = Object.fromEntries(Object.entries(item.inputs).map(([key, value]) => [key, Number(value)]));
+    const record = createRecord({ ...numericInputs, hba1c: parsed.data.actualHbA1c } as Parameters<typeof createRecord>[0], "verified-outcome");
+    const workspace = await readTrainingWorkspace(userId);
+    await saveTrainingWorkspace(userId, { ...workspace, records: [...workspace.records, record], needsRetraining: Boolean(workspace.model) });
+    const nextHistory = await updateHistoryItem(userId, item.id, { actualHbA1c: parsed.data.actualHbA1c, verifiedAt: new Date().toISOString() });
+    return NextResponse.json({ history: nextHistory });
+  } catch (error) {
+    console.error("Failed to save verified outcome:", error);
+    return NextResponse.json({ error: "Failed to save verified outcome" }, { status: 500 });
   }
 }
