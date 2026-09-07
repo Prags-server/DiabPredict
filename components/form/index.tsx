@@ -524,6 +524,9 @@ export function PatientForm({
           {dataset?.pendingRetraining ? (
             <Alert><AlertDescription>New verified records are ready. Retrain to include them in the saved model.</AlertDescription></Alert>
           ) : null}
+          {isAuthenticated && (dataset?.recordCount ?? 0) < 5 ? (
+            <Alert><AlertDescription>Add at least 5 valid training records with laboratory HbA1c results before running a prediction.</AlertDescription></Alert>
+          ) : null}
           <div className="flex flex-col space-y-1.5">
             <div className="flex flex-col items-center justify-center border-2 border-dashed rounded-lg p-6 transition-colors hover:border-primary/50">
               <FileUp className="h-10 w-10 text-muted-foreground mb-2" />
@@ -733,7 +736,7 @@ export function PatientForm({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <Button type="submit" disabled={isLoading || !isAuthenticated}>
+                <Button type="submit" disabled={isLoading || !isAuthenticated || (dataset?.recordCount ?? 0) < 5}>
                 {isLoading ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

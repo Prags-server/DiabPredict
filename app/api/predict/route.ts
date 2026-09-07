@@ -101,12 +101,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Prediction error:", error);
-    const message = error instanceof Error && error.message.includes("Persistent training storage")
-      ? error.message
-      : "Failed to process prediction";
+    const rawMessage = error instanceof Error ? error.message : "";
+    const message = rawMessage.includes("At least 5 verified training records")
+      ? "Add at least 5 valid training records with laboratory HbA1c results, then retrain the model before predicting."
+      : rawMessage.includes("Persistent training storage")
+        ? rawMessage
+        : "Failed to process prediction";
     return NextResponse.json(
       { error: message },
-      { status: message.startsWith("Persistent") ? 503 : 500 }
+      { status: message.startsWith("Persistent") ? 503 : message.startsWith("Add at least") ? 422 : 500 }
     );
   }
 }
