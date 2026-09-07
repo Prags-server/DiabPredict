@@ -1,23 +1,16 @@
 import {
   SESSION_COOKIE_NAME,
   createSessionToken,
-  createUserId,
   getSessionFromRequest,
   getSessionMaxAgeSeconds,
 } from "@/lib/server/auth-session";
+import { createClient } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 const signInSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(2, "Name must be at least 2 characters")
-    .max(40, "Name must be at most 40 characters")
-    .regex(
-      /^[a-zA-Z0-9 _-]+$/,
-      "Name can only include letters, numbers, spaces, _ and -"
-    ),
+  email: z.string().trim().email(),
+  password: z.string().min(8).max(200),
 });
 
 export async function GET(request: NextRequest) {
@@ -34,9 +27,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid sign-in payload" }, { status: 400 });
     }
 
-    const name = parsedPayload.data.name;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !anonKey) {
+      return NextResponse.json(
+        { error: "Secure authentication is not configured." },
+        { status: 503 }
+      );
+    }
+
+    const supabase = createClient(url, anonKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { data, error } = await supabase.auth.signInWithPassword(parsedPayload.data);
+    if (error || !data.user) {
+      return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+    }
+
+    const name =
+      typeof data.user.user_metadata?.full_name === "string"
+        ? data.user.user_metadata.full_name
+        : data.user.email || "Professional";
     const session = {
-      userId: createUserId(name),
+      userId: data.user.id,
       name,
     };
     const token = createSessionToken(session);

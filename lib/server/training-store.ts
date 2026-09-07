@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomUUID } from "crypto";
 import { kv } from "@vercel/kv";
+import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase-admin";
 
 export const TRAINING_COLUMNS = [
   "age", "gender", "height", "weight", "bmi", "systolic_bp",
@@ -43,8 +44,8 @@ const isKvConfigured = Boolean(
 );
 
 function ensureStorageConfigured() {
-  if (process.env.NODE_ENV === "production" && !isKvConfigured) {
-    throw new Error("Persistent training storage is not configured. Set KV_REST_API_URL and KV_REST_API_TOKEN.");
+  if (process.env.NODE_ENV === "production" && !isSupabaseConfigured()) {
+    throw new Error("Secure training storage is not configured. Set Supabase server environment variables.");
   }
 }
 
@@ -76,6 +77,23 @@ async function readLocalWorkspace(userId: string): Promise<TrainingWorkspace> {
 
 export async function readTrainingWorkspace(userId: string): Promise<TrainingWorkspace> {
   ensureStorageConfigured();
+  if (isSupabaseConfigured()) {
+    const { data, error } = await getSupabaseAdmin()
+      .from("training_workspaces")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (error) throw new Error(`Failed to read secure training workspace: ${error.message}`);
+    if (!data) return emptyWorkspace();
+    return {
+      records: Array.isArray(data.records) ? data.records : [],
+      model: data.model ?? null,
+      modelVersions: Array.isArray(data.model_versions) ? data.model_versions : [],
+      needsRetraining: Boolean(data.needs_retraining),
+      lastImportAt: data.last_import_at ?? null,
+      updatedAt: data.updated_at ?? new Date().toISOString(),
+    };
+  }
   if (isKvConfigured) {
     const stored = await kv.get<TrainingWorkspace>(getKey(userId));
     return stored && Array.isArray(stored.records) ? stored : emptyWorkspace();
@@ -87,6 +105,26 @@ export async function readTrainingWorkspace(userId: string): Promise<TrainingWor
 
 export async function saveTrainingWorkspace(userId: string, workspace: TrainingWorkspace) {
   const next = { ...workspace, updatedAt: new Date().toISOString() };
+  if (isSupabaseConfigured()) {
+    const { data, error } = await getSupabaseAdmin()
+      .from("training_workspaces")
+      .upsert({
+        user_id: userId,
+        records: next.records,
+        model: next.model,
+        model_versions: next.modelVersions ?? [],
+        needs_retraining: Boolean(next.needsRetraining),
+        last_import_at: next.lastImportAt,
+        updated_at: next.updatedAt,
+      })
+      .select("*")
+      .single();
+    if (error) throw new Error(`Failed to save secure training workspace: ${error.message}`);
+    return {
+      ...next,
+      updatedAt: data.updated_at ?? next.updatedAt,
+    };
+  }
   if (isKvConfigured) {
     await kv.set(getKey(userId), next);
     return next;

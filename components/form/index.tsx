@@ -106,7 +106,8 @@ export function PatientForm({
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [session, setSession] = useState<UserSession | null>(null);
-  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [authLoading, setAuthLoading] = useState(true);
   const [signInLoading, setSignInLoading] = useState(false);
   const isAuthenticated = !!session;
@@ -167,7 +168,6 @@ export function PatientForm({
       }
       if (result.session) {
         setSession(result.session);
-        setAuthName(result.session.name);
         await Promise.all([loadHistory(), loadDataset()]);
       } else {
         setSession(null);
@@ -223,9 +223,8 @@ export function PatientForm({
   };
 
   const signIn = async () => {
-    const trimmedName = authName.trim();
-    if (trimmedName.length < 2) {
-      setSubmissionError("Enter a profile name with at least 2 characters.");
+    if (!authEmail.trim() || authPassword.length < 8) {
+      setSubmissionError("Enter your professional email and password.");
       return;
     }
 
@@ -235,7 +234,7 @@ export function PatientForm({
       const response = await fetch("/api/auth/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: trimmedName }),
+        body: JSON.stringify({ email: authEmail.trim(), password: authPassword }),
       });
       const result = await response.json();
       if (!response.ok) {
@@ -465,12 +464,20 @@ export function PatientForm({
               </Button>
             </div>
           ) : (
-            <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Input
-                value={authName}
-                onChange={(event) => setAuthName(event.target.value)}
-                placeholder="Enter your profile name"
-                maxLength={40}
+                type="email"
+                value={authEmail}
+                onChange={(event) => setAuthEmail(event.target.value)}
+                placeholder="Professional email"
+                autoComplete="email"
+              />
+              <Input
+                type="password"
+                value={authPassword}
+                onChange={(event) => setAuthPassword(event.target.value)}
+                placeholder="Password"
+                autoComplete="current-password"
               />
               <Button type="button" onClick={signIn} disabled={signInLoading}>
                 {signInLoading ? "Signing in..." : "Sign in"}
@@ -478,7 +485,7 @@ export function PatientForm({
             </div>
           )}
           <p className="text-xs text-muted-foreground">
-            Your profile keeps prediction history isolated by user.
+            Access is invite-only. Your patient data is isolated to your professional account.
           </p>
         </CardContent>
       </Card>

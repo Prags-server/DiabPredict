@@ -18,8 +18,9 @@ The system is designed to be a screening test tool for experiment and should be 
 
 1. Import this repository in Vercel.
 2. Add environment variables from [.env.example](C:/Users/prags/OneDrive/Desktop/DiabPredict/DiabPredict/.env.example):
+   - Supabase Auth variables: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SESSION_SECRET` (required in production)
-   - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (required for persistent training data and history)
+   - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (required for the current persistent storage layer)
 3. Deploy.
 
 The application intentionally refuses to use local filesystem storage in production. Vercel's filesystem is not durable between deployments or invocations, so configure a Vercel KV/Upstash Redis integration before inviting clients.
@@ -27,6 +28,8 @@ The application intentionally refuses to use local filesystem storage in product
 ### Pre-client deployment checklist
 
 - Set a long random `SESSION_SECRET`.
+- Create the Supabase tables and row-level security policies from [`supabase/schema.sql`](C:/Users/prags/OneDrive/Desktop/DiabPredict/DiabPredict/supabase/schema.sql).
+- Create only the approved professional accounts in Supabase Auth and disable public sign-ups.
 - Configure `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel project and every production environment.
 - Run `npm run build` locally.
 - Import a representative, clinically verified CSV and confirm the dataset count.
@@ -56,7 +59,8 @@ Upload a CSV file with these headers (in this order):
 
 ## Profile Authentication
 
-- The app uses lightweight profile sign-in (name-based) with an HTTP-only session cookie.
+- Professional users sign in with invite-only Supabase email/password accounts.
+- The application session cookie contains the verified Supabase user ID, not a name-derived identity.
 - Set `SESSION_SECRET` in your environment for production deployments.
 - You must sign in before prediction history can be accessed.
 
