@@ -4,15 +4,15 @@ import { ErrorBoundary } from "@/components/common/error-boundary";
 import { DatasetRecord, GridView } from "@/components/core/grid-view";
 import { PatientForm } from "@/components/form";
 import { ArrowRight, Database, FlaskConical, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 export default function Home() {
   const [records, setRecords] = useState<DatasetRecord[]>([]);
   const [datasetRevision, setDatasetRevision] = useState(0);
 
-  const handleDataChange = (data: Record<string, string | number>[]) => {
+  const handleDataChange = useCallback((data: Record<string, string | number>[]) => {
     setRecords(data as DatasetRecord[]);
-  };
+  }, []);
 
   const handleRecordsChange = (nextRecords: DatasetRecord[]) => {
     setRecords(nextRecords);
