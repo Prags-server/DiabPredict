@@ -18,7 +18,8 @@ The system is designed to be a screening test tool for experiment and should be 
 
 1. Import this repository in Vercel.
 2. Add environment variables from [.env.example](C:/Users/prags/OneDrive/Desktop/DiabPredict/DiabPredict/.env.example):
-   - Supabase Auth variables: `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - Server-side Supabase values: `SUPABASE_URL` and `SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY` for secure backend storage and server-side access
    - `SESSION_SECRET` (required in production)
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (required for the current persistent storage layer)
 3. Deploy.

@@ -13,6 +13,36 @@ const signInSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
+function getSupabaseAuthConfig() {
+  const url = process.env.SUPABASE_URL ?? "";
+  const anonKey = process.env.SUPABASE_ANON_KEY ?? "";
+
+  return { url: url.trim(), anonKey: anonKey.trim() };
+}
+
+const DEMO_PROFILES = [
+  {
+    email: "professional@diabpredict.local",
+    password: "DiabPredict2025!",
+    name: "Demo Professional",
+  },
+  {
+    email: "admin@diabpredict.local",
+    password: "ClinicalAdmin2025!",
+    name: "Clinical Admin",
+  },
+] as const;
+
+function getLocalDemoSession(email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const profile = DEMO_PROFILES.find((entry) => entry.email === normalizedEmail);
+  if (!profile) return null;
+  return {
+    userId: `local-${profile.email.replace(/[^a-z0-9]/gi, "").slice(0, 20)}`,
+    name: profile.name,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const session = getSessionFromRequest(request);
   return NextResponse.json({ session });
@@ -27,19 +57,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid sign-in payload" }, { status: 400 });
     }
 
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    const email = parsedPayload.data.email.trim().toLowerCase();
+    const password = parsedPayload.data.password;
+
+    const { url, anonKey } = getSupabaseAuthConfig();
+    const isProduction = process.env.NODE_ENV === "production";
     if (!url || !anonKey) {
-      return NextResponse.json(
-        { error: "Secure authentication is not configured." },
-        { status: 503 }
-      );
+      if (!isProduction) {
+        const demoProfile = DEMO_PROFILES.find(
+          (entry) => entry.email === email && entry.password === password
+        );
+        if (demoProfile) {
+          const session = {
+            userId: `local-${demoProfile.email.replace(/[^a-z0-9]/gi, "").slice(0, 20)}`,
+            name: demoProfile.name,
+          };
+          const token = createSessionToken(session);
+          const response = NextResponse.json({ session }, { status: 201 });
+          response.cookies.set({
+            name: SESSION_COOKIE_NAME,
+            value: token,
+            httpOnly: true,
+            sameSite: "lax",
+            secure: isProduction,
+            path: "/",
+            maxAge: getSessionMaxAgeSeconds(),
+          });
+          return response;
+        }
+      }
+
+      const fallbackMessage =
+        process.env.NODE_ENV === "production"
+          ? "Secure authentication is not configured in this deployment. Add SUPABASE_URL and SUPABASE_ANON_KEY, or configure the professional sign-in provider before continuing."
+          : "Secure authentication is not configured for this environment. Use the local demo profile or add the Supabase values in your environment.";
+
+      return NextResponse.json({ error: fallbackMessage }, { status: 503 });
     }
 
     const supabase = createClient(url, anonKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
-    const { data, error } = await supabase.auth.signInWithPassword(parsedPayload.data);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
     if (error || !data.user) {
       return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
     }

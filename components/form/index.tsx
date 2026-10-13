@@ -70,7 +70,33 @@ type DatasetSummary = {
   lastTrainedAt: string | null;
   modelSampleCount: number;
   pendingRetraining: boolean;
-  modelMetrics: { mae: number; mse: number; validationMae?: number; validationMse?: number } | null;
+  modelMetrics: {
+    mae: number;
+    mse: number;
+    rmse?: number;
+    r2?: number;
+    validationMae?: number;
+    validationMse?: number;
+    validationRmse?: number;
+    validationR2?: number;
+    testMae?: number;
+    testMse?: number;
+    testRmse?: number;
+    testR2?: number;
+    sensitivity?: number;
+    specificity?: number;
+    ppv?: number;
+    npv?: number;
+    f1?: number;
+    rocAuc?: number;
+    testSensitivity?: number;
+    testSpecificity?: number;
+    testPpv?: number;
+    testNpv?: number;
+    testF1?: number;
+    testRocAuc?: number;
+    clinicalStatus?: string;
+  } | null;
   modelVersionCount: number;
 };
 
@@ -78,7 +104,33 @@ type ModelVersion = {
   id: string;
   trainedAt: string;
   sampleCount: number;
-  metrics: { mae: number; mse: number; validationMae?: number; validationMse?: number } | null;
+  metrics: {
+    mae: number;
+    mse: number;
+    rmse?: number;
+    r2?: number;
+    validationMae?: number;
+    validationMse?: number;
+    validationRmse?: number;
+    validationR2?: number;
+    testMae?: number;
+    testMse?: number;
+    testRmse?: number;
+    testR2?: number;
+    sensitivity?: number;
+    specificity?: number;
+    ppv?: number;
+    npv?: number;
+    f1?: number;
+    rocAuc?: number;
+    testSensitivity?: number;
+    testSpecificity?: number;
+    testPpv?: number;
+    testNpv?: number;
+    testF1?: number;
+    testRocAuc?: number;
+    clinicalStatus?: string;
+  } | null;
 };
 
 type UserSession = {
@@ -500,13 +552,37 @@ export function PatientForm({
             <div className="rounded-md bg-muted p-3"><p className="text-muted-foreground">Model status</p><p className="text-lg font-semibold">{dataset?.lastTrainedAt ? "Ready" : "Not trained"}</p></div>
           </div>
           {dataset?.modelMetrics ? (
-            <p className="text-xs text-muted-foreground">
-              {dataset.modelMetrics.validationMae !== undefined
-                ? `Validation MAE ${dataset.modelMetrics.validationMae}% · validation MSE ${dataset.modelMetrics.validationMse}`
-                : `Training MAE ${dataset.modelMetrics.mae}% · training MSE ${dataset.modelMetrics.mse}`}
-              {dataset.modelVersionCount ? ` · ${dataset.modelVersionCount} prior version${dataset.modelVersionCount === 1 ? "" : "s"} retained` : ""}
-            </p>
-          ) : null}
+                    <div className="space-y-2 rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+                      <p className="font-medium text-foreground">Model evaluation</p>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded bg-background px-2 py-1">Train MAE {dataset.modelMetrics.mae}</span>
+                        <span className="rounded bg-background px-2 py-1">Train MSE {dataset.modelMetrics.mse}</span>
+                        {dataset.modelMetrics.validationMae !== undefined ? (
+                          <span className="rounded bg-background px-2 py-1">Val MAE {dataset.modelMetrics.validationMae}</span>
+                        ) : null}
+                        {dataset.modelMetrics.testMae !== undefined ? (
+                          <span className="rounded bg-background px-2 py-1">Test MAE {dataset.modelMetrics.testMae}</span>
+                        ) : null}
+                      </div>
+                      {dataset.modelMetrics.validationMae !== undefined || dataset.modelMetrics.testMae !== undefined ? (
+                        <div className="flex flex-wrap gap-2">
+                          {dataset.modelMetrics.validationMae !== undefined ? (
+                            <span className="rounded bg-background px-2 py-1">Val RMSE {dataset.modelMetrics.validationRmse ?? "n/a"}</span>
+                          ) : null}
+                          {dataset.modelMetrics.testMae !== undefined ? (
+                            <span className="rounded bg-background px-2 py-1">Test R² {dataset.modelMetrics.testR2 ?? "n/a"}</span>
+                          ) : null}
+                          {dataset.modelMetrics.testSensitivity !== undefined ? (
+                            <span className="rounded bg-background px-2 py-1">Sens {dataset.modelMetrics.testSensitivity}</span>
+                          ) : null}
+                          {dataset.modelMetrics.testSpecificity !== undefined ? (
+                            <span className="rounded bg-background px-2 py-1">Spec {dataset.modelMetrics.testSpecificity}</span>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      {dataset.modelVersionCount ? <p>Retained {dataset.modelVersionCount} prior version{dataset.modelVersionCount === 1 ? "" : "s"}</p> : null}
+                    </div>
+                  ) : null}
           {retrainingOutcome ? <Alert><AlertDescription>{retrainingOutcome}</AlertDescription></Alert> : null}
           {modelHistory.length ? (
             <details className="rounded-md border p-3 text-sm">
@@ -514,7 +590,7 @@ export function PatientForm({
               <div className="mt-3 space-y-2">
                 {modelHistory.map((version) => (
                   <div key={version.id} className="flex flex-wrap items-center justify-between gap-2 rounded bg-muted/50 p-2">
-                    <span>{new Date(version.trainedAt).toLocaleString()} · {version.metrics?.validationMae !== undefined ? `validation MAE ${version.metrics.validationMae}%` : `${version.sampleCount} records`}</span>
+                    <span>{new Date(version.trainedAt).toLocaleString()} · {version.metrics?.validationMae !== undefined ? `validation MAE ${version.metrics.validationMae}` : `${version.sampleCount} records`}</span>
                     <Button type="button" size="sm" variant="outline" onClick={() => restoreModel(version)}>Restore</Button>
                   </div>
                 ))}

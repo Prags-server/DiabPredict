@@ -20,7 +20,33 @@ export type SerializedModel = {
   id: string;
   trainedAt: string;
   sampleCount: number;
-  metrics?: { mae: number; mse: number; validationMae?: number; validationMse?: number };
+  metrics?: {
+    mae: number;
+    mse: number;
+    rmse?: number;
+    r2?: number;
+    validationMae?: number;
+    validationMse?: number;
+    validationRmse?: number;
+    validationR2?: number;
+    testMae?: number;
+    testMse?: number;
+    testRmse?: number;
+    testR2?: number;
+    sensitivity?: number;
+    specificity?: number;
+    ppv?: number;
+    npv?: number;
+    f1?: number;
+    rocAuc?: number;
+    testSensitivity?: number;
+    testSpecificity?: number;
+    testPpv?: number;
+    testNpv?: number;
+    testF1?: number;
+    testRocAuc?: number;
+    clinicalStatus?: string;
+  };
   normalization: {
     mode: "zscore" | "minmax";
     first: number[];
@@ -39,9 +65,7 @@ export type TrainingWorkspace = {
 };
 
 const DATA_DIRECTORY = path.join(process.cwd(), ".data", "training");
-const isKvConfigured = Boolean(
-  process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
-);
+const isKvConfigured = false;
 
 function ensureStorageConfigured() {
   if (process.env.NODE_ENV === "production" && !isSupabaseConfigured()) {

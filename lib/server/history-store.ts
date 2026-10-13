@@ -41,9 +41,7 @@ export type PredictionHistoryItem = {
 const DATA_DIRECTORY = path.join(process.cwd(), ".data");
 const HISTORY_DIRECTORY = path.join(DATA_DIRECTORY, "history");
 const MAX_HISTORY_ITEMS = 100;
-const isKvConfigured = Boolean(
-  process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN
-);
+const isKvConfigured = false;
 
 function ensureStorageConfigured() {
   if (process.env.NODE_ENV === "production" && !isSupabaseConfigured()) {

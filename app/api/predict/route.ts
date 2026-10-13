@@ -106,7 +106,9 @@ export async function POST(request: NextRequest) {
       ? "Add at least 5 valid training records with laboratory HbA1c results, then retrain the model before predicting."
       : rawMessage.includes("Persistent training storage")
         ? rawMessage
-        : "Failed to process prediction";
+        : rawMessage.includes("trained") || rawMessage.includes("model")
+          ? "The saved model is not ready yet. Add valid records and retrain the model before prediction."
+          : "Failed to process prediction";
     return NextResponse.json(
       { error: message },
       { status: message.startsWith("Persistent") ? 503 : message.startsWith("Add at least") ? 422 : 500 }
