@@ -18,7 +18,7 @@ The system is designed to be a screening test tool for experiment and should be 
 
 1. Import this repository in Vercel.
 2. Add environment variables from [.env.example](C:/Users/prags/OneDrive/Desktop/DiabPredict/DiabPredict/.env.example):
-   - Server-side Supabase values: `SUPABASE_URL` and `SUPABASE_ANON_KEY`
+   - Supabase Auth values: `SUPABASE_URL` and `SUPABASE_ANON_KEY` (the `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` aliases are also accepted)
    - `SUPABASE_SERVICE_ROLE_KEY` for secure backend storage and server-side access
    - `SESSION_SECRET` (required in production)
    - `KV_REST_API_URL` and `KV_REST_API_TOKEN` (required for the current persistent storage layer)
@@ -31,6 +31,7 @@ The application intentionally refuses to use local filesystem storage in product
 - Set a long random `SESSION_SECRET`.
 - Create the Supabase tables and row-level security policies from [`supabase/schema.sql`](C:/Users/prags/OneDrive/Desktop/DiabPredict/DiabPredict/supabase/schema.sql).
 - Create only the approved professional accounts in Supabase Auth and disable public sign-ups.
+- Confirm the Supabase project is active and not paused before testing sign-in.
 - Configure `KV_REST_API_URL` and `KV_REST_API_TOKEN` in the Vercel project and every production environment.
 - Run `npm run build` locally.
 - Import a representative, clinically verified CSV and confirm the dataset count.

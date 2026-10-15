@@ -14,8 +14,14 @@ const signInSchema = z.object({
 });
 
 function getSupabaseAuthConfig() {
-  const url = process.env.SUPABASE_URL ?? "";
-  const anonKey = process.env.SUPABASE_ANON_KEY ?? "";
+  const url =
+    process.env.SUPABASE_URL ??
+    process.env.NEXT_PUBLIC_SUPABASE_URL ??
+    "";
+  const anonKey =
+    process.env.SUPABASE_ANON_KEY ??
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
+    "";
 
   return { url: url.trim(), anonKey: anonKey.trim() };
 }
@@ -103,7 +109,22 @@ export async function POST(request: NextRequest) {
       password,
     });
     if (error || !data.user) {
-      return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+      if (error?.status === 400 || error?.code === "invalid_credentials") {
+        return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
+      }
+
+      console.error("Supabase sign-in failed:", {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+      });
+      return NextResponse.json(
+        {
+          error:
+            "Supabase authentication is temporarily unavailable. Check that the Supabase project is active and that its URL and anon key are current.",
+        },
+        { status: 503 }
+      );
     }
 
     const name =
