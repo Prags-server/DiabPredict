@@ -220,7 +220,17 @@ export function PatientForm({
       }
       if (result.session) {
         setSession(result.session);
-        await Promise.all([loadHistory(), loadDataset()]);
+        const results = await Promise.allSettled([loadHistory(), loadDataset()]);
+        const failedLoad = results.find(
+          (entry): entry is PromiseRejectedResult => entry.status === "rejected"
+        );
+        if (failedLoad) {
+          setSubmissionError(
+            failedLoad.reason instanceof Error
+              ? failedLoad.reason.message
+              : "Signed in, but the protected workspace could not be loaded."
+          );
+        }
       } else {
         setSession(null);
         setHistory([]);

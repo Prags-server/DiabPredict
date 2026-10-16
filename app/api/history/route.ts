@@ -63,7 +63,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ history });
   } catch (error) {
     console.error("Failed to read prediction history:", error);
-    const message = error instanceof Error && error.message.includes("Persistent history storage")
+    const message = error instanceof Error && (
+      error.message.includes("Persistent history storage") ||
+      error.message.includes("Secure history storage") ||
+      error.message.includes("Secure Supabase storage")
+    )
       ? error.message
       : "Failed to read prediction history";
     return NextResponse.json(

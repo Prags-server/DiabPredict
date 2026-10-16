@@ -70,7 +70,11 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Failed to load saved dataset:", error);
-    const message = error instanceof Error && error.message.includes("Persistent training storage")
+    const message = error instanceof Error && (
+      error.message.includes("Persistent training storage") ||
+      error.message.includes("Secure training storage") ||
+      error.message.includes("Secure Supabase storage")
+    )
       ? error.message
       : "Failed to load saved dataset";
     return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 500 });
@@ -148,7 +152,11 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error("Dataset import failed:", error);
-    const message = error instanceof Error && error.message.includes("Persistent training storage")
+    const message = error instanceof Error && (
+      error.message.includes("Persistent training storage") ||
+      error.message.includes("Secure training storage") ||
+      error.message.includes("Secure Supabase storage")
+    )
       ? error.message
       : "Failed to import training dataset";
     return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 500 });
@@ -176,7 +184,11 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ summary: workspaceSummary(next), records: next.records.slice(0, 100) });
   } catch (error) {
     console.error("Dataset update failed:", error);
-    const message = error instanceof Error && error.message.includes("Persistent training storage")
+    const message = error instanceof Error && (
+      error.message.includes("Persistent training storage") ||
+      error.message.includes("Secure training storage") ||
+      error.message.includes("Secure Supabase storage")
+    )
       ? error.message
       : "Failed to update training record";
     return NextResponse.json({ error: message }, { status: message.startsWith("Persistent") ? 503 : 500 });
