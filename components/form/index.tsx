@@ -419,6 +419,27 @@ export function PatientForm({
     }
   };
 
+  const exportTrainingWorkspace = async () => {
+    try {
+      const response = await fetch("/api/model/export");
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({}));
+        throw new Error(result.error || "Failed to export training workspace");
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `diabpredict-workspace-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      setSubmissionError(error instanceof Error ? error.message : "Failed to export training workspace.");
+    }
+  };
+
   const addVerifiedOutcome = async (item: HistoryItem) => {
     const entered = window.prompt("Enter the verified laboratory HbA1c result (%). Only actual lab results should be added to training.");
     if (entered === null) return;
@@ -642,7 +663,11 @@ export function PatientForm({
             <RefreshCw className="mr-2 h-4 w-4" />
             {retraining ? "Retraining..." : "Retrain saved model"}
           </Button>
+          <Button type="button" variant="outline" onClick={exportTrainingWorkspace} disabled={!isAuthenticated}>
+            Download model workspace export
+          </Button>
           <p className="text-xs text-muted-foreground">Only validated spreadsheet records and verified laboratory outcomes are used for training.</p>
+          <p className="text-xs text-muted-foreground">The export contains private records and model weights. Store it securely and do not upload it to public repositories.</p>
           <a href="/training-template.csv" download className="text-xs font-medium text-primary underline underline-offset-4">Download the CSV template</a>
         </CardContent>
       </Card>
