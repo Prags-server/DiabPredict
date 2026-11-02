@@ -1,0 +1,176 @@
+{
+  "dataset": {
+    "source": "Final%20346%20patient%20data%282%29.csv",
+    "rawRows": 346,
+    "validRows": 346,
+    "invalidRows": 0,
+    "invalidExamples": [],
+    "duplicateRows": 0
+  },
+  "split": {
+    "train": 222,
+    "validation": 55,
+    "test": 69,
+    "splitRule": "Application-compatible 20% final holdout, then 20% validation slice of development records; row-index IDs used because imported application IDs are random."
+  },
+  "architecture": "11-input TensorFlow.js Sequential: Dense(128 ReLU, L2=.001), BatchNorm, Dense(64 ReLU, L2=.001), BatchNorm, Dropout(.3), Dense(32 ReLU, L2=.001), BatchNorm, Dropout(.2), Dense(16 ReLU, L2=.001), Dense(1 linear); Adam learning rate .001 in the application training helper.",
+  "metrics": {
+    "train": {
+      "mae": 0.322098,
+      "mse": 0.167859,
+      "rmse": 0.409706,
+      "r2": 0.861615,
+      "confusionMatrix": [
+        [
+          165,
+          1
+        ],
+        [
+          10,
+          46
+        ]
+      ],
+      "sensitivity": 0.821429,
+      "specificity": 0.993976,
+      "ppv": 0.978723,
+      "npv": 0.942857,
+      "f1": 0.893204,
+      "rocAuc": 0.978916
+    },
+    "validation": {
+      "mae": 0.80312,
+      "mse": 1.150893,
+      "rmse": 1.072797,
+      "r2": 0.359238,
+      "confusionMatrix": [
+        [
+          24,
+          8
+        ],
+        [
+          4,
+          19
+        ]
+      ],
+      "sensitivity": 0.826087,
+      "specificity": 0.75,
+      "ppv": 0.703704,
+      "npv": 0.857143,
+      "f1": 0.76,
+      "rocAuc": 0.88587
+    },
+    "test": {
+      "mae": 0.424545,
+      "mse": 0.400034,
+      "rmse": 0.632482,
+      "r2": 0.532426,
+      "confusionMatrix": [
+        [
+          59,
+          2
+        ],
+        [
+          2,
+          6
+        ]
+      ],
+      "sensitivity": 0.75,
+      "specificity": 0.967213,
+      "ppv": 0.75,
+      "npv": 0.967213,
+      "f1": 0.75,
+      "rocAuc": 0.991803
+    }
+  },
+  "binaryConfusionMatrices": {
+    "train": [
+      [
+        165,
+        1
+      ],
+      [
+        10,
+        46
+      ]
+    ],
+    "validation": [
+      [
+        24,
+        8
+      ],
+      [
+        4,
+        19
+      ]
+    ],
+    "test": [
+      [
+        59,
+        2
+      ],
+      [
+        2,
+        6
+      ]
+    ]
+  },
+  "threeCategoryConfusionMatrices": {
+    "train": [
+      [
+        51,
+        6,
+        0
+      ],
+      [
+        35,
+        73,
+        1
+      ],
+      [
+        0,
+        10,
+        46
+      ]
+    ],
+    "validation": [
+      [
+        5,
+        4,
+        0
+      ],
+      [
+        6,
+        9,
+        8
+      ],
+      [
+        1,
+        3,
+        19
+      ]
+    ],
+    "test": [
+      [
+        12,
+        3,
+        0
+      ],
+      [
+        20,
+        24,
+        2
+      ],
+      [
+        0,
+        2,
+        6
+      ]
+    ]
+  },
+  "reproducibilityNotes": [
+    "The application currently assigns random UUIDs on import, so the exact production holdout cannot be reconstructed from the CSV alone.",
+    "TensorFlow.js initialization and shuffled training are stochastic; reproduced metrics can vary between runs unless seed control and persisted IDs are added.",
+    "The application stores only aggregate metrics, not per-record predictions, so direct one-to-one metric comparison requires an export from the active model workspace.",
+    "The application currently reports an ROC-AUC implementation that sorts scores in ascending order; this analysis reports conventional pairwise ROC-AUC."
+  ]
+}

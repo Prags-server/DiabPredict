@@ -24,6 +24,7 @@
 .DS_Store
 *.pem
 .data/
+/reproducibility/predictions.csv
 
 # debug
 npm-debug.log*
