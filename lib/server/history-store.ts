@@ -33,6 +33,7 @@ export type PredictionHistoryItem = {
   id: string;
   createdAt: string;
   prediction: Prediction;
+  modelId?: string;
   inputs: PredictionInputs;
   actualHbA1c?: number;
   verifiedAt?: string;

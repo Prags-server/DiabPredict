@@ -58,6 +58,7 @@ type HistoryItem = {
   id: string;
   createdAt: string;
   prediction: Prediction;
+  modelId?: string;
   inputs: z.infer<typeof formSchema>;
   actualHbA1c?: number;
   verifiedAt?: string;
@@ -916,6 +917,11 @@ export function PatientForm({
                     <p className="text-xs text-muted-foreground">
                       {new Date(item.createdAt).toLocaleString()}
                     </p>
+                    {item.modelId ? (
+                      <p className="text-xs text-muted-foreground">
+                        Model version: {item.modelId.slice(0, 8)}
+                      </p>
+                    ) : null}
                     {item.actualHbA1c !== undefined ? (
                       <p className="text-xs text-green-700">Verified lab HbA1c: {item.actualHbA1c}%</p>
                     ) : null}

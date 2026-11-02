@@ -7,6 +7,10 @@ interface TrainingParams {
     Y: tf.Tensor1D;
     stats: NormalizationStats;
   };
+  validationData?: {
+    X: tf.Tensor2D;
+    Y: tf.Tensor1D;
+  };
   model: tf.Sequential;
   epochs?: number;
   batchSize?: number;
@@ -23,6 +27,7 @@ export async function trainModel({
   validationSplit = 0.2,
   earlyStoppingPatience = 10,
   learningRate = 0.001,
+  validationData,
 }: TrainingParams): Promise<tf.History> {
   console.log("Starting model training...");
 
@@ -45,7 +50,9 @@ export async function trainModel({
   const history = await model.fit(trainingData.X, trainingData.Y, {
     epochs,
     batchSize,
-    validationSplit,
+    ...(validationData
+      ? { validationData: [validationData.X, validationData.Y] }
+      : { validationSplit }),
     shuffle: true,
     callbacks: {
       onEpochEnd: (epoch, logs) => {

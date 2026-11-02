@@ -154,8 +154,8 @@ function getMetrics(model: tf.Sequential, inputs: tf.Tensor, targets: tf.Tensor1
 function validationTensors(records: TrainingRecord[], stats: NormalizationStats) {
   const features = tf.tensor2d(records.map((record) => [record.age, record.gender, record.height, record.weight, record.bmi, record.systolic_bp, record.diastolic_bp, record.rbs, record.fbs, record.waist, record.hip]));
   const targets = tf.tensor1d(records.map((record) => record.hba1c));
-  if (stats.mode === "zscore") return { inputs: features.sub(stats.mean).div(stats.std.add(1e-6)), rawInputs: features, targets };
-  return { inputs: features.sub(stats.min).div(stats.max.sub(stats.min).add(1e-6)), rawInputs: features, targets };
+  if (stats.mode === "zscore") return { inputs: features.sub(stats.mean).div(stats.std.add(1e-6)) as tf.Tensor2D, rawInputs: features, targets };
+  return { inputs: features.sub(stats.min).div(stats.max.sub(stats.min).add(1e-6)) as tf.Tensor2D, rawInputs: features, targets };
 }
 
 function serializeModel(model: tf.Sequential, stats: NormalizationStats, sampleCount: number, metrics: SerializedModel["metrics"]): SerializedModel {
@@ -171,7 +171,7 @@ export async function getModel({ userId, records, forceRetrain = false }: {
 }) {
   const workspace = await readTrainingWorkspace(userId);
   if (workspace.model && !forceRetrain) {
-    return { model: hydrateModel(workspace.model), stats: deserializeStats(workspace.model.normalization), trained: false };
+    return { model: hydrateModel(workspace.model), modelId: workspace.model.id, stats: deserializeStats(workspace.model.normalization), trained: false };
   }
   if (records.length < 5) {
     throw new Error("At least 5 verified training records are required before a model can be trained.");
@@ -186,17 +186,19 @@ export async function getModel({ userId, records, forceRetrain = false }: {
 
   const trainingData = await prepareData(modelTrainingRecords);
   const model = createModel();
-  await trainModel({ trainingData, model, validationSplit: 0 });
+  const validation = validationRecords.length ? validationTensors(validationRecords, trainingData.stats) : null;
+  await trainModel({
+    trainingData,
+    model,
+    validationSplit: 0,
+    validationData: validation ? { X: validation.inputs, Y: validation.targets } : undefined,
+  });
 
   const trainingMetrics = getMetrics(model, trainingData.X, trainingData.Y);
   let metrics: SerializedModel["metrics"] = { ...trainingMetrics };
 
   if (validationRecords.length) {
-    const validation = validationTensors(validationRecords, trainingData.stats);
-    const validationMetrics = getMetrics(model, validation.inputs, validation.targets);
-    validation.inputs.dispose();
-    validation.rawInputs.dispose();
-    validation.targets.dispose();
+    const validationMetrics = getMetrics(model, validation!.inputs, validation!.targets);
     metrics = {
       ...trainingMetrics,
       validationMae: validationMetrics.mae,
@@ -204,6 +206,11 @@ export async function getModel({ userId, records, forceRetrain = false }: {
       validationRmse: validationMetrics.rmse,
       validationR2: validationMetrics.r2,
     };
+  }
+  if (validation) {
+    validation.inputs.dispose();
+    validation.rawInputs.dispose();
+    validation.targets.dispose();
   }
 
   if (testRecords.length) {
@@ -235,7 +242,7 @@ export async function getModel({ userId, records, forceRetrain = false }: {
     trainingData.Y.dispose();
     if (trainingData.stats.mode === "zscore") { trainingData.stats.mean.dispose(); trainingData.stats.std.dispose(); }
     else { trainingData.stats.min.dispose(); trainingData.stats.max.dispose(); }
-    return { model: hydrateModel(workspace.model!), stats: deserializeStats(workspace.model!.normalization), trained: false, promoted: false, metrics: workspace.model!.metrics };
+    return { model: hydrateModel(workspace.model!), modelId: workspace.model!.id, stats: deserializeStats(workspace.model!.normalization), trained: false, promoted: false, metrics: workspace.model!.metrics };
   }
 
   const serialized = serializeModel(model, trainingData.stats, records.length, metrics);
@@ -249,5 +256,5 @@ export async function getModel({ userId, records, forceRetrain = false }: {
     trainingData.stats.min.dispose();
     trainingData.stats.max.dispose();
   }
-  return { model, stats: deserializeStats(serialized.normalization), trained: true, promoted: true, metrics };
+  return { model, modelId: serialized.id, stats: deserializeStats(serialized.normalization), trained: true, promoted: true, metrics };
 }

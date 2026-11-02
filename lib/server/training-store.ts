@@ -1,6 +1,6 @@
 import { promises as fs } from "fs";
 import path from "path";
-import { randomUUID } from "crypto";
+import { createHash, randomUUID } from "crypto";
 import { kv } from "@vercel/kv";
 import { getSupabaseAdmin, isSupabaseConfigured } from "./supabase-admin";
 
@@ -166,7 +166,9 @@ export function createRecord(
   values: Record<TrainingColumn, number>,
   source: TrainingRecord["source"]
 ): TrainingRecord {
-  return { id: randomUUID(), createdAt: new Date().toISOString(), source, ...values };
+  const fingerprint = recordFingerprint(values);
+  const id = `record-${createHash("sha256").update(fingerprint).digest("hex").slice(0, 24)}`;
+  return { id, createdAt: new Date().toISOString(), source, ...values };
 }
 
 export function recordFingerprint(record: Pick<TrainingRecord, TrainingColumn>): string {

@@ -37,6 +37,7 @@ The application intentionally refuses to use local filesystem storage in product
 - Import a representative, clinically verified CSV and confirm the dataset count.
 - Train the initial model, run a prediction, and verify that history persists after a reload.
 - Treat predictions as screening support only; they are not a diagnosis.
+- A predicted HbA1c in the diabetes range should prompt confirmatory laboratory testing and clinical assessment; it must not be presented as confirmed diabetes.
 
 ## Training CSV Format
 
@@ -50,6 +51,9 @@ Upload a CSV file with these headers (in this order):
 - The first prediction trains a model from the saved dataset; its weights and normalization values are persisted with the profile. Later predictions reuse that saved model.
 - Use **Retrain saved model** after importing more records or recording verified outcomes.
 - From Prediction History, use **Add lab result** only when the actual laboratory HbA1c becomes available. That verified result is added to the next training set; predictions themselves are never used as labels.
+- Each prediction records the model version used, allowing later audit of which saved model produced the result.
+- Retraining uses an explicit held-out validation slice for validation loss and early stopping; the final test slice remains separate from model fitting and promotion decisions.
+- Newly created training records use a stable clinical-row fingerprint for split reproducibility. Existing workspaces retain their original IDs, so export the workspace before research analysis.
 - At least five validated records are required before training can begin. In production, configure Vercel KV for durable storage across serverless deployments.
 
 ## Prediction History Persistence

@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       id: randomUUID(),
       createdAt: new Date().toISOString(),
       prediction,
+      modelId: modelState.modelId,
       inputs: {
         age: String(parsedInput.data[0]), gender: String(parsedInput.data[1]), height: String(parsedInput.data[2]),
         weight: String(parsedInput.data[3]), bmi: String(parsedInput.data[4]), systolic_bp: String(parsedInput.data[5]),
