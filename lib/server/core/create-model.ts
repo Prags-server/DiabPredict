@@ -69,7 +69,7 @@ export function createModel(): tf.Sequential {
   );
 
   // Use a custom optimizer configuration with gradient clipping
-  const optimizer = tf.train.adam(0.0005); // Lower learning rate for stability
+  const optimizer = tf.train.adam(0.001);
 
   // Apply gradient clipping to the optimizer
   // Note: TensorFlow.js adam() only accepts learning rate as a number

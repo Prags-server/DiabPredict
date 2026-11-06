@@ -1,4 +1,5 @@
 const fs = require("fs");
+const crypto = require("crypto");
 const path = require("path");
 const tf = require("@tensorflow/tfjs");
 
@@ -26,7 +27,8 @@ const header = parseLine(lines[0]);
 const rows = lines.slice(1).filter(Boolean).map((line, index) => {
   const values = parseLine(line);
   const record = Object.fromEntries(header.map((key, i) => [key, values[i]]));
-  return { id: `row-${index + 1}`, ...record };
+  const fingerprint = columns.map((column) => record[column]).join("|");
+  return { id: `record-${crypto.createHash("sha256").update(fingerprint).digest("hex").slice(0, 24)}`, ...record };
 });
 
 const ranges = {
@@ -81,7 +83,16 @@ function createModel() {
   model.add(tf.layers.dropout({ rate: 0.2 }));
   model.add(tf.layers.dense({ units: 16, activation: "relu", kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) }));
   model.add(tf.layers.dense({ units: 1, activation: "linear", kernelInitializer: "zeros" }));
-  model.compile({ optimizer: tf.train.adam(0.0005), loss: "meanSquaredError", metrics: ["mse", "mae"] });
+  model.compile({ optimizer: tf.train.adam(0.001), loss: "meanSquaredError", metrics: ["mse", "mae"] });
+  return model;
+}
+function createCompactModel() {
+  const model = tf.sequential();
+  model.add(tf.layers.dense({ inputShape: [11], units: 32, activation: "relu", kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) }));
+  model.add(tf.layers.dense({ units: 16, activation: "relu", kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) }));
+  model.add(tf.layers.dense({ units: 8, activation: "relu", kernelRegularizer: tf.regularizers.l2({ l2: 0.001 }) }));
+  model.add(tf.layers.dense({ units: 1, activation: "linear" }));
+  model.compile({ optimizer: tf.train.adam(0.001), loss: "meanSquaredError", metrics: ["mse", "mae"] });
   return model;
 }
 
@@ -91,6 +102,37 @@ function prepare(records) {
   const mean = x.mean(0);
   const std = x.sub(mean).square().mean(0).sqrt();
   return { x: x.sub(mean).div(std.add(1e-6)), y, mean, std };
+}
+async function fitLikeApplication(model, x, y, validationX, validationY) {
+  let bestLoss = Infinity;
+  let bestWeights = null;
+  let patience = 0;
+  await model.fit(x, y, {
+    epochs: 200,
+    batchSize: 16,
+    validationData: [validationX, validationY],
+    shuffle: true,
+    verbose: 0,
+    callbacks: {
+      onEpochEnd: (_epoch, logs) => {
+        const validationLoss = logs && logs.val_loss;
+        if (typeof validationLoss !== "number") return;
+        if (validationLoss < bestLoss) {
+          bestLoss = validationLoss;
+          bestWeights?.forEach((weight) => weight.dispose());
+          bestWeights = model.getWeights().map((weight) => weight.clone());
+          patience = 0;
+        } else {
+          patience += 1;
+          if (patience >= 10) model.stopTraining = true;
+        }
+      },
+    },
+  });
+  if (bestWeights) {
+    model.setWeights(bestWeights);
+    bestWeights.forEach((weight) => weight.dispose());
+  }
 }
 
 function metricValues(predictions, targets) {
@@ -169,33 +211,44 @@ function lineSvg(points, title, xLabel, yLabel, xMin = 0, xMax = 1, yMin = 0, yM
   const { trainRecords, validationRecords, testRecords } = split(valid);
   const training = prepare(trainRecords);
   const model = createModel();
-  await model.fit(training.x, training.y, { epochs: 200, batchSize: 16, validationSplit: 0, shuffle: true, verbose: 0 });
+  const validationInputs = tf.tensor2d(validationRecords.map((row) => features.map((column) => Math.max(0, row[column])))).sub(training.mean).div(training.std.add(1e-6));
+  const validationTargets = tf.tensor1d(validationRecords.map((row) => row.hba1c));
+  await fitLikeApplication(model, training.x, training.y, validationInputs, validationTargets);
 
-  const evaluate = (records) => {
+  const evaluate = (modelToEvaluate, records) => {
     const raw = tf.tensor2d(records.map((row) => features.map((column) => Math.max(0, row[column]))));
     const normalized = raw.sub(training.mean).div(training.std.add(1e-6));
-    const predictions = Array.from(model.predict(normalized).reshape([records.length]).dataSync());
+    const predictions = Array.from(modelToEvaluate.predict(normalized).reshape([records.length]).dataSync());
     const targets = records.map((row) => row.hba1c);
     raw.dispose(); normalized.dispose();
     return { predictions, targets, metrics: metricValues(predictions, targets) };
   };
-  const train = evaluate(trainRecords);
-  const validation = evaluate(validationRecords);
-  const test = evaluate(testRecords);
+  const train = evaluate(model, trainRecords);
+  const validation = evaluate(model, validationRecords);
+  const test = evaluate(model, testRecords);
+  const compactModel = createCompactModel();
+  await fitLikeApplication(compactModel, training.x, training.y, validationInputs, validationTargets);
+  const compactTest = evaluate(compactModel, testRecords);
   const all = [...train.predictions, ...validation.predictions, ...test.predictions];
   const allTargets = [...train.targets, ...validation.targets, ...test.targets];
   const report = {
     dataset: { source: path.basename(input), rawRows: rows.length, validRows: valid.length, invalidRows: issues.length, invalidExamples: issues.slice(0, 10), duplicateRows: rows.length - new Set(rows.map((row) => columns.map((column) => row[column]).join("|"))).size },
-    split: { train: trainRecords.length, validation: validationRecords.length, test: testRecords.length, splitRule: "Application-compatible 20% final holdout, then 20% validation slice of development records; row-index IDs used because imported application IDs are random." },
+    split: { train: trainRecords.length, validation: validationRecords.length, test: testRecords.length, trainIds: trainRecords.map((record) => record.id), validationIds: validationRecords.map((record) => record.id), testIds: testRecords.map((record) => record.id), splitRule: "Application-compatible 20% final holdout, then 20% validation slice of development records; stable clinical-row IDs used." },
     architecture: "11-input TensorFlow.js Sequential: Dense(128 ReLU, L2=.001), BatchNorm, Dense(64 ReLU, L2=.001), BatchNorm, Dropout(.3), Dense(32 ReLU, L2=.001), BatchNorm, Dropout(.2), Dense(16 ReLU, L2=.001), Dense(1 linear); Adam learning rate .001 in the application training helper.",
     metrics: Object.fromEntries(Object.entries({ train, validation, test }).map(([key, value]) => [key, Object.fromEntries(Object.entries(value.metrics).map(([metric, result]) => [metric, Array.isArray(result) ? result : round(result)]))])),
+    architectureComparison: {
+      current: "11 → 128 → 64 → 32 → 16 → 1 with batch normalization, dropout, L2 regularization",
+      compact: "11 → 32 → 16 → 8 → 1 with L2 regularization",
+      compactTestMetrics: Object.fromEntries(Object.entries(compactTest.metrics).map(([metric, result]) => [metric, Array.isArray(result) ? result : round(result)])),
+      selectionRule: "Comparison only; the deployed architecture is not changed automatically. Select using validation performance before finalizing a research model.",
+    },
     binaryConfusionMatrices: { train: train.metrics.confusionMatrix, validation: validation.metrics.confusionMatrix, test: test.metrics.confusionMatrix },
     threeCategoryConfusionMatrices: { train: categoryMatrix(train.predictions, train.targets), validation: categoryMatrix(validation.predictions, validation.targets), test: categoryMatrix(test.predictions, test.targets) },
     reproducibilityNotes: [
-      "The application currently assigns random UUIDs on import, so the exact production holdout cannot be reconstructed from the CSV alone.",
+      "This reproduction uses stable clinical-row fingerprints matching newly created application record IDs. Existing workspaces with legacy random IDs must be exported to preserve their exact assignments.",
       "TensorFlow.js initialization and shuffled training are stochastic; reproduced metrics can vary between runs unless seed control and persisted IDs are added.",
       "The application stores only aggregate metrics, not per-record predictions, so direct one-to-one metric comparison requires an export from the active model workspace.",
-      "The application currently reports an ROC-AUC implementation that sorts scores in ascending order; this analysis reports conventional pairwise ROC-AUC."
+      "Application and reproduction ROC-AUC now use the same conventional pairwise ranking method."
     ]
   };
   fs.writeFileSync(path.join(outputDir, "reproducibility-results.json"), JSON.stringify(report, null, 2));
@@ -222,5 +275,6 @@ function lineSvg(points, title, xLabel, yLabel, xMin = 0, xMax = 1, yMin = 0, yM
   });
   writeSvg("calibration-plot.svg", lineSvg(calibration, "Category-stratified calibration (test set)", "Mean predicted HbA1c (%)", "Mean observed HbA1c (%)", 4, 10, 4, 10));
   console.log(JSON.stringify({ outputDir, rows: rows.length, valid: valid.length, split: report.split, testMetrics: report.metrics.test }, null, 2));
-  model.dispose(); training.x.dispose(); training.y.dispose(); training.mean.dispose(); training.std.dispose();
+  fs.writeFileSync(path.join(outputDir, "split-assignments.json"), JSON.stringify({ train: trainRecords.map((record) => record.id), validation: validationRecords.map((record) => record.id), test: testRecords.map((record) => record.id) }, null, 2));
+  model.dispose(); compactModel.dispose(); validationInputs.dispose(); validationTargets.dispose(); training.x.dispose(); training.y.dispose(); training.mean.dispose(); training.std.dispose();
 })();

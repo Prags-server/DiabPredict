@@ -93,28 +93,19 @@ function calculateClassificationMetrics(predictions: number[], targets: number[]
     return { sensitivity, specificity, ppv, npv, f1, rocAuc: 0.5 };
   }
 
-  const sortedPairs = predictions
-    .map((value, index) => ({ value, label: positiveLabels[index] }))
-    .sort((left, right) => left.value - right.value);
-
-  let tp = 0;
-  let fp = 0;
-  let prevFpr = 0;
-  let prevTpr = 0;
-  let rocAuc = 0;
-
-  for (const pair of sortedPairs) {
-    if (pair.label) tp += 1;
-    else fp += 1;
-
-    const currentTpr = tp / positives;
-    const currentFpr = fp / negatives;
-    rocAuc += (currentFpr - prevFpr) * (currentTpr + prevTpr) * 0.5;
-    prevFpr = currentFpr;
-    prevTpr = currentTpr;
+  let concordant = 0;
+  let ties = 0;
+  for (let index = 0; index < predictions.length; index += 1) {
+    if (!positiveLabels[index]) continue;
+    for (let otherIndex = 0; otherIndex < predictions.length; otherIndex += 1) {
+      if (positiveLabels[otherIndex]) continue;
+      if (predictions[index] > predictions[otherIndex]) concordant += 1;
+      else if (predictions[index] === predictions[otherIndex]) ties += 1;
+    }
   }
 
-  return { sensitivity, specificity, ppv, npv, f1, rocAuc: Number(Math.min(Math.max(rocAuc, 0), 1).toFixed(3)) };
+  const rocAuc = (concordant + ties / 2) / (positives * negatives);
+  return { sensitivity, specificity, ppv, npv, f1, rocAuc: Number(rocAuc.toFixed(3)) };
 }
 
 function getMetrics(model: tf.Sequential, inputs: tf.Tensor, targets: tf.Tensor1D) {
@@ -158,10 +149,10 @@ function validationTensors(records: TrainingRecord[], stats: NormalizationStats)
   return { inputs: features.sub(stats.min).div(stats.max.sub(stats.min).add(1e-6)) as tf.Tensor2D, rawInputs: features, targets };
 }
 
-function serializeModel(model: tf.Sequential, stats: NormalizationStats, sampleCount: number, metrics: SerializedModel["metrics"]): SerializedModel {
+function serializeModel(model: tf.Sequential, stats: NormalizationStats, sampleCount: number, metrics: SerializedModel["metrics"], split: SerializedModel["split"]): SerializedModel {
   const weights = model.getWeights();
   const serialized = weights.map((weight) => ({ shape: weight.shape, values: Array.from(weight.dataSync()) }));
-  return { id: randomUUID(), trainedAt: new Date().toISOString(), sampleCount, metrics, normalization: serializeStats(stats), weights: serialized };
+  return { id: randomUUID(), trainedAt: new Date().toISOString(), sampleCount, metrics, split, normalization: serializeStats(stats), weights: serialized };
 }
 
 export async function getModel({ userId, records, forceRetrain = false }: {
@@ -245,7 +236,11 @@ export async function getModel({ userId, records, forceRetrain = false }: {
     return { model: hydrateModel(workspace.model!), modelId: workspace.model!.id, stats: deserializeStats(workspace.model!.normalization), trained: false, promoted: false, metrics: workspace.model!.metrics };
   }
 
-  const serialized = serializeModel(model, trainingData.stats, records.length, metrics);
+  const serialized = serializeModel(model, trainingData.stats, records.length, metrics, {
+    train: modelTrainingRecords.map((record) => record.id),
+    validation: validationRecords.map((record) => record.id),
+    test: testRecords.map((record) => record.id),
+  });
   await saveTrainingWorkspace(userId, { ...workspace, records, model: serialized, needsRetraining: false, modelVersions: workspace.model ? [workspace.model, ...(workspace.modelVersions ?? [])].slice(0, 5) : workspace.modelVersions ?? [] });
   trainingData.X.dispose();
   trainingData.Y.dispose();

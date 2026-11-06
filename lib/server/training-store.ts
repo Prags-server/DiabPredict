@@ -47,6 +47,11 @@ export type SerializedModel = {
     testRocAuc?: number;
     clinicalStatus?: string;
   };
+  split?: {
+    train: string[];
+    validation: string[];
+    test: string[];
+  };
   normalization: {
     mode: "zscore" | "minmax";
     first: number[];
