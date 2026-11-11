@@ -305,7 +305,17 @@ export function PatientForm({
       }
 
       setSession(result.session);
-      await Promise.all([loadHistory(), loadDataset()]);
+      const results = await Promise.allSettled([loadHistory(), loadDataset()]);
+      const failedLoad = results.find(
+        (result): result is PromiseRejectedResult => result.status === "rejected"
+      );
+      if (failedLoad) {
+        setSubmissionError(
+          failedLoad.reason instanceof Error
+            ? `Signed in, but the workspace could not be loaded: ${failedLoad.reason.message}`
+            : "Signed in, but the workspace could not be loaded."
+        );
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Failed to sign in to profile.";

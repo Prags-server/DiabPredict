@@ -151,7 +151,10 @@ export async function POST(request: NextRequest) {
     return response;
   } catch (error) {
     console.error("Failed to create session:", error);
-    return NextResponse.json({ error: "Failed to create session" }, { status: 500 });
+    const message = error instanceof TypeError
+      ? "Supabase authentication is unreachable. Verify the Supabase project URL, project status, and deployment network settings."
+      : "Failed to create session";
+    return NextResponse.json({ error: message }, { status: 503 });
   }
 }
 
