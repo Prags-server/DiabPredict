@@ -463,6 +463,12 @@ export function PatientForm({
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Failed to save verified outcome");
       setHistory(result.history || []);
+      setSubmissionError("");
+      setRetrainingOutcome(
+        result.recordSaved === false
+          ? "Lab result verified. The matching training record was already saved."
+          : "Lab result verified and added to the next training set."
+      );
       await loadDataset();
     } catch (error) {
       setSubmissionError(error instanceof Error ? error.message : "Failed to save verified outcome.");

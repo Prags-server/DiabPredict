@@ -149,14 +149,21 @@ export async function PATCH(request: NextRequest) {
     const numericInputs = Object.fromEntries(Object.entries(item.inputs).map(([key, value]) => [key, Number(value)]));
     const record = createRecord({ ...numericInputs, hba1c: parsed.data.actualHbA1c } as Parameters<typeof createRecord>[0], "verified-outcome");
     const workspace = await readTrainingWorkspace(userId);
-    if (workspace.records.some((existing) => recordFingerprint(existing) === recordFingerprint(record))) {
-      return NextResponse.json({ error: "This verified training record is already saved." }, { status: 409 });
+    const alreadySaved = workspace.records.some((existing) => recordFingerprint(existing) === recordFingerprint(record));
+    if (!alreadySaved) {
+      await saveTrainingWorkspace(userId, { ...workspace, records: [...workspace.records, record], needsRetraining: Boolean(workspace.model) });
     }
-    await saveTrainingWorkspace(userId, { ...workspace, records: [...workspace.records, record], needsRetraining: Boolean(workspace.model) });
     const nextHistory = await updateHistoryItem(userId, item.id, { actualHbA1c: parsed.data.actualHbA1c, verifiedAt: new Date().toISOString() });
-    return NextResponse.json({ history: nextHistory });
+    return NextResponse.json({ history: nextHistory, recordSaved: !alreadySaved });
   } catch (error) {
     console.error("Failed to save verified outcome:", error);
-    return NextResponse.json({ error: "Failed to save verified outcome" }, { status: 500 });
+    const message = error instanceof Error && (
+      error.message.includes("Secure history storage") ||
+      error.message.includes("Secure training storage") ||
+      error.message.includes("Supabase")
+    )
+      ? error.message
+      : "Failed to save verified outcome";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
