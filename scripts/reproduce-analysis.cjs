@@ -187,6 +187,40 @@ function categoryMatrix(predictions, targets) {
   targets.forEach((target, i) => { matrix[categories(target)][categories(predictions[i])] += 1; });
   return matrix;
 }
+function categoryMetrics(predictions, targets) {
+  const matrix = categoryMatrix(predictions, targets);
+  const perCategory = matrix.map((row, category) => {
+    const tp = row[category];
+    const fn = row.reduce((sum, value, index) => sum + (index === category ? 0 : value), 0);
+    const fp = matrix.reduce((sum, values, index) => sum + (index === category ? 0 : values[category]), 0);
+    const tn = matrix.flat().reduce((sum, value) => sum + value, 0) - tp - fn - fp;
+    return {
+      sensitivity: tp + fn ? tp / (tp + fn) : null,
+      specificity: tn + fp ? tn / (tn + fp) : null,
+      precision: tp + fp ? tp / (tp + fp) : null,
+      f1: 2 * tp + fp + fn ? (2 * tp) / (2 * tp + fp + fn) : null,
+      support: tp + fn,
+    };
+  });
+  const validF1 = perCategory.map((metric) => metric.f1).filter((value) => value !== null);
+  return { perCategory, macroF1: validF1.reduce((sum, value) => sum + value, 0) / validF1.length, balancedAccuracy: perCategory.reduce((sum, metric) => sum + (metric.sensitivity ?? 0), 0) / perCategory.length };
+}
+function blandAltmanStats(predictions, targets) {
+  const differences = predictions.map((prediction, index) => prediction - targets[index]);
+  const means = predictions.map((prediction, index) => (prediction + targets[index]) / 2);
+  const bias = differences.reduce((sum, value) => sum + value, 0) / differences.length;
+  const variance = differences.reduce((sum, value) => sum + (value - bias) ** 2, 0) / Math.max(1, differences.length - 1);
+  const sd = Math.sqrt(variance);
+  const standardError = sd / Math.sqrt(differences.length);
+  return {
+    n: differences.length,
+    meanBias: bias,
+    lowerLimitOfAgreement: bias - 1.96 * sd,
+    upperLimitOfAgreement: bias + 1.96 * sd,
+    bias95Ci: [bias - 1.96 * standardError, bias + 1.96 * standardError],
+    meanOfPairs: means.reduce((sum, value) => sum + value, 0) / means.length,
+  };
+}
 
 function round(value) { return value === null ? null : Number(value.toFixed(6)); }
 function writeSvg(name, content) { fs.writeFileSync(path.join(outputDir, name), content, "utf8"); }
@@ -229,8 +263,7 @@ function lineSvg(points, title, xLabel, yLabel, xMin = 0, xMax = 1, yMin = 0, yM
   const compactModel = createCompactModel();
   await fitLikeApplication(compactModel, training.x, training.y, validationInputs, validationTargets);
   const compactTest = evaluate(compactModel, testRecords);
-  const all = [...train.predictions, ...validation.predictions, ...test.predictions];
-  const allTargets = [...train.targets, ...validation.targets, ...test.targets];
+  const testPairs = test.predictions.map((prediction, index) => ({ x: test.targets[index], y: prediction }));
   const report = {
     dataset: { source: path.basename(input), rawRows: rows.length, validRows: valid.length, invalidRows: issues.length, invalidExamples: issues.slice(0, 10), duplicateRows: rows.length - new Set(rows.map((row) => columns.map((column) => row[column]).join("|"))).size },
     split: { train: trainRecords.length, validation: validationRecords.length, test: testRecords.length, trainIds: trainRecords.map((record) => record.id), validationIds: validationRecords.map((record) => record.id), testIds: testRecords.map((record) => record.id), splitRule: "Application-compatible 20% final holdout, then 20% validation slice of development records; stable clinical-row IDs used." },
@@ -244,6 +277,8 @@ function lineSvg(points, title, xLabel, yLabel, xMin = 0, xMax = 1, yMin = 0, yM
     },
     binaryConfusionMatrices: { train: train.metrics.confusionMatrix, validation: validation.metrics.confusionMatrix, test: test.metrics.confusionMatrix },
     threeCategoryConfusionMatrices: { train: categoryMatrix(train.predictions, train.targets), validation: categoryMatrix(validation.predictions, validation.targets), test: categoryMatrix(test.predictions, test.targets) },
+    threeCategoryMetrics: { train: categoryMetrics(train.predictions, train.targets), validation: categoryMetrics(validation.predictions, validation.targets), test: categoryMetrics(test.predictions, test.targets) },
+    blandAltman: blandAltmanStats(test.predictions, test.targets),
     reproducibilityNotes: [
       "This reproduction uses stable clinical-row fingerprints matching newly created application record IDs. Existing workspaces with legacy random IDs must be exported to preserve their exact assignments.",
       "TensorFlow.js initialization and shuffled training are stochastic; reproduced metrics can vary between runs unless seed control and persisted IDs are added.",
@@ -257,8 +292,8 @@ function lineSvg(points, title, xLabel, yLabel, xMin = 0, xMax = 1, yMin = 0, yM
     ...validation.targets.map((actual, i) => `validation,${actual},${validation.predictions[i]},${categories(actual)},${categories(validation.predictions[i])}`),
     ...test.targets.map((actual, i) => `test,${actual},${test.predictions[i]},${categories(actual)},${categories(test.predictions[i])}`)
   ]).join("\n"));
-  writeSvg("actual-vs-predicted.svg", scatterSvg(all.map((y, i) => ({ x: allTargets[i], y })), "Actual versus predicted HbA1c", "Laboratory HbA1c (%)", "Predicted HbA1c (%)"));
-  const bland = all.map((prediction, i) => ({ x: (prediction + allTargets[i]) / 2, y: prediction - allTargets[i] }));
+  writeSvg("actual-vs-predicted.svg", scatterSvg(testPairs, "Actual versus predicted HbA1c (test set)", "Laboratory HbA1c (%)", "Predicted HbA1c (%)"));
+  const bland = test.predictions.map((prediction, i) => ({ x: (prediction + test.targets[i]) / 2, y: prediction - test.targets[i] }));
   writeSvg("bland-altman.svg", scatterSvg(bland, "Bland–Altman plot", "Mean of actual and predicted HbA1c", "Prediction minus actual"));
   const testLabels = test.targets.map((value) => value >= 6.5);
   const rocPoints = [{ x: 0, y: 0 }];

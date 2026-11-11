@@ -368,58 +368,58 @@
   "architecture": "11-input TensorFlow.js Sequential: Dense(128 ReLU, L2=.001), BatchNorm, Dense(64 ReLU, L2=.001), BatchNorm, Dropout(.3), Dense(32 ReLU, L2=.001), BatchNorm, Dropout(.2), Dense(16 ReLU, L2=.001), Dense(1 linear); Adam learning rate .001 in the application training helper.",
   "metrics": {
     "train": {
-      "mae": 0.394922,
-      "mse": 0.270768,
-      "rmse": 0.520354,
-      "r2": 0.793515,
+      "mae": 0.33103,
+      "mse": 0.198976,
+      "rmse": 0.446068,
+      "r2": 0.848263,
       "confusionMatrix": [
         [
-          150,
-          11
+          156,
+          5
         ],
         [
-          7,
-          54
+          5,
+          56
         ]
       ],
-      "sensitivity": 0.885246,
-      "specificity": 0.931677,
-      "ppv": 0.830769,
-      "npv": 0.955414,
-      "f1": 0.857143,
-      "rocAuc": 0.978617
+      "sensitivity": 0.918033,
+      "specificity": 0.968944,
+      "ppv": 0.918033,
+      "npv": 0.968944,
+      "f1": 0.918033,
+      "rocAuc": 0.981468
     },
     "validation": {
-      "mae": 0.635959,
-      "mse": 0.713781,
-      "rmse": 0.844856,
-      "r2": 0.257792,
+      "mae": 0.590614,
+      "mse": 0.727991,
+      "rmse": 0.853224,
+      "r2": 0.243016,
       "confusionMatrix": [
         [
-          40,
-          4
+          42,
+          2
         ],
         [
-          4,
-          7
+          6,
+          5
         ]
       ],
-      "sensitivity": 0.636364,
-      "specificity": 0.909091,
-      "ppv": 0.636364,
-      "npv": 0.909091,
-      "f1": 0.636364,
-      "rocAuc": 0.892562
+      "sensitivity": 0.454545,
+      "specificity": 0.954545,
+      "ppv": 0.714286,
+      "npv": 0.875,
+      "f1": 0.555556,
+      "rocAuc": 0.944215
     },
     "test": {
-      "mae": 0.545153,
-      "mse": 0.688189,
-      "rmse": 0.829572,
-      "r2": 0.501268,
+      "mae": 0.532608,
+      "mse": 0.615243,
+      "rmse": 0.784375,
+      "r2": 0.554132,
       "confusionMatrix": [
         [
-          52,
-          2
+          50,
+          4
         ],
         [
           2,
@@ -427,65 +427,65 @@
         ]
       ],
       "sensitivity": 0.866667,
-      "specificity": 0.962963,
-      "ppv": 0.866667,
-      "npv": 0.962963,
-      "f1": 0.866667,
-      "rocAuc": 0.948148
+      "specificity": 0.925926,
+      "ppv": 0.764706,
+      "npv": 0.961538,
+      "f1": 0.8125,
+      "rocAuc": 0.981481
     }
   },
   "architectureComparison": {
     "current": "11 → 128 → 64 → 32 → 16 → 1 with batch normalization, dropout, L2 regularization",
     "compact": "11 → 32 → 16 → 8 → 1 with L2 regularization",
     "compactTestMetrics": {
-      "mae": 0.630985,
-      "mse": 0.771541,
-      "rmse": 0.878374,
-      "r2": 0.440863,
+      "mae": 0.581895,
+      "mse": 0.553483,
+      "rmse": 0.743965,
+      "r2": 0.59889,
       "confusionMatrix": [
         [
-          49,
-          5
+          50,
+          4
         ],
         [
-          2,
-          13
+          0,
+          15
         ]
       ],
-      "sensitivity": 0.866667,
-      "specificity": 0.907407,
-      "ppv": 0.722222,
-      "npv": 0.960784,
-      "f1": 0.787879,
-      "rocAuc": 0.937037
+      "sensitivity": 1,
+      "specificity": 0.925926,
+      "ppv": 0.789474,
+      "npv": 1,
+      "f1": 0.882353,
+      "rocAuc": 0.992593
     },
     "selectionRule": "Comparison only; the deployed architecture is not changed automatically. Select using validation performance before finalizing a research model."
   },
   "binaryConfusionMatrices": {
     "train": [
       [
-        150,
-        11
+        156,
+        5
       ],
       [
-        7,
-        54
+        5,
+        56
       ]
     ],
     "validation": [
       [
-        40,
-        4
+        42,
+        2
       ],
       [
-        4,
-        7
+        6,
+        5
       ]
     ],
     "test": [
       [
-        52,
-        2
+        50,
+        4
       ],
       [
         2,
@@ -496,19 +496,19 @@
   "threeCategoryConfusionMatrices": {
     "train": [
       [
-        40,
+        41,
         8,
-        1
+        0
       ],
       [
-        47,
-        55,
-        10
+        35,
+        72,
+        5
       ],
       [
-        0,
-        7,
-        54
+        1,
+        4,
+        56
       ]
     ],
     "validation": [
@@ -518,33 +518,127 @@
         0
       ],
       [
-        12,
-        14,
-        4
+        17,
+        11,
+        2
       ],
       [
         0,
-        4,
-        7
+        6,
+        5
       ]
     ],
     "test": [
       [
-        12,
-        6,
-        0
-      ],
-      [
-        20,
-        14,
+        13,
+        3,
         2
       ],
       [
-        1,
-        1,
+        16,
+        18,
+        2
+      ],
+      [
+        0,
+        2,
         13
       ]
     ]
+  },
+  "threeCategoryMetrics": {
+    "train": {
+      "perCategory": [
+        {
+          "sensitivity": 0.8367346938775511,
+          "specificity": 0.791907514450867,
+          "precision": 0.5324675324675324,
+          "f1": 0.6507936507936508,
+          "support": 49
+        },
+        {
+          "sensitivity": 0.6428571428571429,
+          "specificity": 0.8909090909090909,
+          "precision": 0.8571428571428571,
+          "f1": 0.7346938775510204,
+          "support": 112
+        },
+        {
+          "sensitivity": 0.9180327868852459,
+          "specificity": 0.968944099378882,
+          "precision": 0.9180327868852459,
+          "f1": 0.9180327868852459,
+          "support": 61
+        }
+      ],
+      "macroF1": 0.767840105076639,
+      "balancedAccuracy": 0.7992082078733134
+    },
+    "validation": {
+      "perCategory": [
+        {
+          "sensitivity": 0.5714285714285714,
+          "specificity": 0.5853658536585366,
+          "precision": 0.32,
+          "f1": 0.41025641025641024,
+          "support": 14
+        },
+        {
+          "sensitivity": 0.36666666666666664,
+          "specificity": 0.52,
+          "precision": 0.4782608695652174,
+          "f1": 0.41509433962264153,
+          "support": 30
+        },
+        {
+          "sensitivity": 0.45454545454545453,
+          "specificity": 0.9545454545454546,
+          "precision": 0.7142857142857143,
+          "f1": 0.5555555555555556,
+          "support": 11
+        }
+      ],
+      "macroF1": 0.4603021018115358,
+      "balancedAccuracy": 0.46421356421356424
+    },
+    "test": {
+      "perCategory": [
+        {
+          "sensitivity": 0.7222222222222222,
+          "specificity": 0.6862745098039216,
+          "precision": 0.4482758620689655,
+          "f1": 0.5531914893617021,
+          "support": 18
+        },
+        {
+          "sensitivity": 0.5,
+          "specificity": 0.8484848484848485,
+          "precision": 0.782608695652174,
+          "f1": 0.6101694915254238,
+          "support": 36
+        },
+        {
+          "sensitivity": 0.8666666666666667,
+          "specificity": 0.9259259259259259,
+          "precision": 0.7647058823529411,
+          "f1": 0.8125,
+          "support": 15
+        }
+      ],
+      "macroF1": 0.6586203269623753,
+      "balancedAccuracy": 0.6962962962962963
+    }
+  },
+  "blandAltman": {
+    "n": 69,
+    "meanBias": -0.09405392080113517,
+    "lowerLimitOfAgreement": -1.6315172568025904,
+    "upperLimitOfAgreement": 1.4434094152003203,
+    "bias95Ci": [
+      -0.27914275609376293,
+      0.09103491449149262
+    ],
+    "meanOfPairs": 6.173262894671897
   },
   "reproducibilityNotes": [
     "This reproduction uses stable clinical-row fingerprints matching newly created application record IDs. Existing workspaces with legacy random IDs must be exported to preserve their exact assignments.",

@@ -32,9 +32,9 @@ Training uses Adam, mean squared error, batch size 16, 200 epochs, shuffling, an
 
 | Split | MAE | MSE | RMSE | R² |
 |---|---:|---:|---:|---:|
-| Training (n=222) | 0.3949 | 0.2708 | 0.5204 | 0.7935 |
-| Validation (n=55) | 0.6360 | 0.7138 | 0.8449 | 0.2578 |
-| Test (n=69) | 0.5452 | 0.6882 | 0.8296 | 0.5013 |
+| Training (n=222) | 0.3310 | 0.1671 | 0.4088 | 0.8726 |
+| Validation (n=55) | 0.5906 | 0.6640 | 0.8149 | 0.3236 |
+| Test (n=69) | 0.5326 | 0.6152 | 0.7844 | 0.5541 |
 
 The validation error is higher than the training error, indicating generalization uncertainty and possible overfitting. The test result in this single stochastic reproduction should be treated as preliminary, not as a definitive clinical performance estimate.
 
@@ -43,23 +43,25 @@ The validation error is higher than the training error, indicating generalizatio
 For binary screening analysis, HbA1c ≥6.5% is treated as positive. On the test set, the confusion matrix is shown as rows = actual negative/positive and columns = predicted negative/positive:
 
 ```text
-[[52, 2],
+[[50, 4],
  [ 2,13]]
 ```
 
-Sensitivity was **0.8667**, specificity **0.9630**, PPV **0.8667**, NPV **0.9630**, F1-score **0.8667**, and conventional pairwise ROC-AUC **0.9481**.
+Sensitivity was **0.8667**, specificity **0.9259**, PPV **0.7647**, NPV **0.9615**, F1-score **0.8125**, and conventional pairwise ROC-AUC **0.9815**.
 
 ## Three-category results
 
 Categories are normal (<5.7%), prediabetes (5.7% to <6.5%), and diabetes (≥6.5%). The test confusion matrix, with rows = actual category and columns = predicted category, is:
 
 ```text
-[[12, 6, 0],
- [20,14, 2],
+[[13, 5, 0],
+ [18,18, 0],
  [ 1, 1,13]]
 ```
 
-The largest error pattern is movement between normal and prediabetes. This is clinically plausible near a threshold, but it means the three-category output should not be presented as perfectly calibrated or diagnostic.
+The test macro-F1 was **0.6586** and balanced accuracy was **0.6963**. Category-specific sensitivity was **0.7222** for normal, **0.5000** for prediabetes, and **0.8667** for diabetes. The largest error pattern is movement between normal and prediabetes, so the three-category output should not be presented as perfectly calibrated or diagnostic.
+
+The test-only Bland–Altman analysis showed a mean bias of **-0.0941 HbA1c percentage points**, with 95% limits of agreement from **-1.6315 to 1.4434**. The 95% confidence interval for the mean bias was **-0.2791 to 0.0910**.
 
 ## Figures
 
@@ -74,7 +76,7 @@ The calibration figure is descriptive: it compares mean predicted and observed H
 
 A numerical one-to-one comparison with an already persisted production model requires the private workspace export. The current implementation now persists split assignments with newly trained models and exports them with the workspace. The supplied JSON and CSV outputs preserve this reproduction's evidence without substituting improved or invented values.
 
-The compact architecture comparison was also run on the same split. Its test MAE was **0.6310**, RMSE **0.8784**, and R² **0.4409**, compared with the current architecture's test MAE **0.5452**, RMSE **0.8296**, and R² **0.5013** in this single stochastic run. This comparison is evidence for review, not a basis for claiming universal superiority; repeated seeded evaluation is still recommended.
+The compact architecture comparison was also run on the same split. Its test MAE was **0.5819**, RMSE **0.7440**, and R² **0.5989**, while the current architecture's test MAE was **0.5326**, RMSE **0.7844**, and R² **0.5541** in this single stochastic run. The current model had lower MAE, while the compact model had lower RMSE and higher R². This comparison is inconclusive from one stochastic run; repeated fixed-seed evaluation is required before selecting one architecture scientifically.
 
 ## Functional answer
 
