@@ -21,10 +21,12 @@ const predictionSchema = z.object({
   predictedHbA1c: z.number(),
   diabeticStatus: z.string(),
   risk: z.string(),
+  isBorderline: z.boolean().optional(),
   interpretation: z.object({
     status: z.string(),
     description: z.string(),
     distanceToNextThreshold: z.string(),
+    thresholdWarning: z.string().nullable().optional(),
   }),
 });
 

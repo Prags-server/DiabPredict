@@ -47,10 +47,12 @@ type Prediction = {
   predictedHbA1c: number;
   diabeticStatus: string;
   risk: string;
+  isBorderline?: boolean;
   interpretation: {
     status: string;
     description: string;
     distanceToNextThreshold: string;
+    thresholdWarning?: string | null;
   };
 };
 

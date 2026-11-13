@@ -11,9 +11,11 @@ type PredictionDetails = {
   predictedHbA1c: number;
   diabeticStatus: string;
   risk: string;
+  isBorderline?: boolean;
   interpretation: {
     description: string;
     distanceToNextThreshold: string;
+    thresholdWarning?: string | null;
   };
 };
 
@@ -150,6 +152,17 @@ const HbA1cResultCard = ({ prediction }: { prediction: PredictionDetails }) => {
             {prediction?.interpretation?.description}
           </p>
         </div>
+
+        {prediction?.isBorderline && prediction.interpretation.thresholdWarning ? (
+          <div className="bg-amber-50 p-4 rounded-lg mb-4 border border-amber-200">
+            <div className="flex items-start">
+              <AlertCircle className="text-amber-600 h-5 w-5 mr-2 mt-0.5" />
+              <p className="text-sm text-amber-900">
+                {prediction.interpretation.thresholdWarning}
+              </p>
+            </div>
+          </div>
+        ) : null}
 
         {/* Warning for unusually low values */}
         {showLowValueWarning && (

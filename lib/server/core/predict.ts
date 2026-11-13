@@ -1,6 +1,10 @@
 import * as tf from "@tensorflow/tfjs";
 import { NormalizationStats } from "./prepare";
 
+const NORMAL_THRESHOLD = 5.7;
+const DIABETES_THRESHOLD = 6.5;
+const BORDERLINE_DISTANCE = 0.3;
+
 export async function predictPatient(
   newPatient: any,
   trainedModel: any,
@@ -31,10 +35,10 @@ export async function predictPatient(
   let diabeticStatus = "Non-Diabetic";
   let risk = "Low";
 
-  if (hba1cValue < 5.7) {
+  if (hba1cValue < NORMAL_THRESHOLD) {
     diabeticStatus = "Non-Diabetic";
     risk = "Low";
-  } else if (hba1cValue >= 5.7 && hba1cValue < 6.5) {
+  } else if (hba1cValue < DIABETES_THRESHOLD) {
     diabeticStatus = "Pre-Diabetic";
     risk = "Moderate";
   } else {
@@ -42,24 +46,35 @@ export async function predictPatient(
     risk = "High";
   }
 
-  // Generate an interpretable output
+  const distanceToThreshold = Math.min(
+    Math.abs(hba1cValue - NORMAL_THRESHOLD),
+    Math.abs(hba1cValue - DIABETES_THRESHOLD)
+  );
+  const isBorderline = distanceToThreshold <= BORDERLINE_DISTANCE;
+
   return {
     predictedHbA1c: parseFloat(hba1cValue.toFixed(2)),
     diabeticStatus,
     risk,
+    isBorderline,
     interpretation: {
       status: diabeticStatus,
-      description: getDescription(diabeticStatus),
+      description: getDescription(diabeticStatus, isBorderline),
       distanceToNextThreshold: getDistanceToThreshold(
         hba1cValue,
         diabeticStatus
       ),
+      thresholdWarning: isBorderline
+        ? "This estimate is close to a clinical HbA1c threshold. Classification may change with normal measurement variation; confirm with a laboratory HbA1c test."
+        : null,
     },
   };
 }
 
-// Helper function to get description based on status
-function getDescription(status: string): string {
+function getDescription(status: string, isBorderline: boolean): string {
+  if (isBorderline) {
+    return "This estimate is near a category boundary. Use it for screening discussion only and arrange confirmatory laboratory testing with a healthcare professional.";
+  }
   switch (status) {
     case "Non-Diabetic":
       return "Your predicted HbA1c is within the normal range. Continue maintaining healthy lifestyle habits.";
@@ -76,17 +91,17 @@ function getDescription(status: string): string {
 function getDistanceToThreshold(hba1cValue: number, status: string): string {
   switch (status) {
     case "Non-Diabetic":
-      return `${(5.7 - hba1cValue).toFixed(
+      return `${(NORMAL_THRESHOLD - hba1cValue).toFixed(
         2
-      )} units below pre-diabetic threshold (5.7)`;
+      )} units below pre-diabetic threshold (${NORMAL_THRESHOLD})`;
     case "Pre-Diabetic":
-      return `${(6.5 - hba1cValue).toFixed(
+      return `${(DIABETES_THRESHOLD - hba1cValue).toFixed(
         2
-      )} units below diabetic threshold (6.5)`;
+      )} units below diabetic threshold (${DIABETES_THRESHOLD})`;
     case "Diabetic":
-      return `${(hba1cValue - 6.5).toFixed(
+      return `${(hba1cValue - DIABETES_THRESHOLD).toFixed(
         2
-      )} units above diabetic threshold (6.5)`;
+      )} units above diabetic threshold (${DIABETES_THRESHOLD})`;
     default:
       return "";
   }

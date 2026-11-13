@@ -38,6 +38,7 @@ The application intentionally refuses to use local filesystem storage in product
 - Train the initial model, run a prediction, and verify that history persists after a reload.
 - Treat predictions as screening support only; they are not a diagnosis.
 - A predicted HbA1c in the diabetes range should prompt confirmatory laboratory testing and clinical assessment; it must not be presented as confirmed diabetes.
+- Estimates within 0.3 percentage points of the 5.7% or 6.5% category thresholds are marked borderline. This is a threshold-proximity warning, not a validated prediction interval; confirm borderline results with laboratory HbA1c testing.
 
 ## Training CSV Format
 
